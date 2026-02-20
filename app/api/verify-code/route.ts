@@ -4,10 +4,10 @@
  * Accepts { phone, code, name, carrier, injuryType, surgery,
  *           lostWages, estimateLow, estimateHigh,
  *           source?,           -- 'widget' | 'quiz'
- *           // Quiz-only extras:
- *           incidentType?, incidentTimeframe?, faultLevel?,
- *           receivedTreatment?, hospitalized?, stillInTreatment?,
- *           missedWork?, missedWorkDays?, hasAttorney?, insuranceContact? }
+ *           // Quiz-only extras (spread from QuizAnswers):
+ *           incidentType?, state?, incidentTimeframe?, atFault?,
+ *           receivedTreatment?, hospitalized?, hasSurgery?, stillInTreatment?,
+ *           missedWork?, insuranceContact?, hasAttorney? }
  *
  * Validates OTP, marks it used, saves verified lead to SQLite (with quiz
  * scoring when source='quiz'), and returns a JWT session token.
@@ -45,23 +45,23 @@ export async function POST(req: NextRequest) {
     code,
     name,
     carrier,
-    injuryType,
-    surgery,
+    injuryType,    // computed string passed from client ('spinal'|'fracture'|'soft_tissue')
+    surgery,       // widget compat: boolean
     lostWages,
     estimateLow,
     estimateHigh,
     source = 'widget',
-    // Quiz extras
+    // Quiz QuizAnswers fields (spread from client)
     incidentType,
     incidentTimeframe,
-    faultLevel,
+    atFault,
     receivedTreatment,
     hospitalized,
+    hasSurgery,
     stillInTreatment,
     missedWork,
-    missedWorkDays,
-    hasAttorney,
     insuranceContact,
+    hasAttorney,
   } = body;
 
   const phone = normalizePhone(String(rawPhone ?? ''));
@@ -116,36 +116,44 @@ export async function POST(req: NextRequest) {
   // ── Build quiz answers object for scoring (quiz mode only) ───────────────────
   const isQuiz = String(source) === 'quiz';
 
-  let score    = 0;
-  let tier     = 'COLD';
+  let score     = 0;
+  let tier      = 'COLD';
   let finalLow  = Number(estimateLow  ?? 0);
   let finalHigh = Number(estimateHigh ?? 0);
 
   if (isQuiz) {
     const qa: QuizAnswers = {
-      incidentType:      (incidentType  as QuizAnswers['incidentType'])      ?? null,
-      injuryType:        (injuryType    as QuizAnswers['injuryType'])        ?? null,
+      incidentType:      (incidentType      as QuizAnswers['incidentType'])      ?? null,
+      state:             (body.state        as string)                           ?? null,
       incidentTimeframe: (incidentTimeframe as QuizAnswers['incidentTimeframe']) ?? null,
-      faultLevel:        (faultLevel    as QuizAnswers['faultLevel'])        ?? null,
-      receivedTreatment: receivedTreatment != null ? Boolean(receivedTreatment) : null,
-      hospitalized:      hospitalized   != null ? Boolean(hospitalized)      : null,
-      hasSurgery:        surgery        != null ? Boolean(surgery)           : null,
-      stillInTreatment:  stillInTreatment != null ? Boolean(stillInTreatment) : null,
-      missedWork:        missedWork     != null ? Boolean(missedWork)        : null,
-      missedWorkDays:    missedWorkDays != null ? Number(missedWorkDays)     : null,
-      lostWages:         Number(lostWages ?? 0),
-      hasAttorney:       (hasAttorney   as QuizAnswers['hasAttorney'])       ?? null,
-      insuranceContact:  (insuranceContact as QuizAnswers['insuranceContact']) ?? null,
+      atFault:           atFault            != null ? Boolean(atFault)           : null,
+      receivedTreatment: (receivedTreatment as QuizAnswers['receivedTreatment']) ?? null,
+      hospitalized:      hospitalized       != null ? Boolean(hospitalized)      : null,
+      hasSurgery:        hasSurgery         != null ? Boolean(hasSurgery)        : null,
+      stillInTreatment:  (stillInTreatment  as QuizAnswers['stillInTreatment'])  ?? null,
+      missedWork:        (missedWork        as QuizAnswers['missedWork'])         ?? null,
+      lostWages:         Number(lostWages   ?? 0),
+      insuranceContact:  (insuranceContact  as QuizAnswers['insuranceContact'])  ?? null,
+      hasAttorney:       (hasAttorney       as QuizAnswers['hasAttorney'])        ?? null,
     };
 
     score = calculateScore(qa);
     tier  = scoreTier(score);
 
     const est = calculateQuizEstimate(qa);
-    if (est) { finalLow = est.low; finalHigh = est.high; }
+    finalLow  = est.low;
+    finalHigh = est.high;
   }
 
   // ── Save verified lead ───────────────────────────────────────────────────────
+  // Derive boolean values from new string-typed fields
+  const hasSurgeryBool    = hasSurgery  != null ? Boolean(hasSurgery)  : Boolean(surgery);
+  const hospitalizedBool  = hospitalized != null ? Boolean(hospitalized) : false;
+  const stillTreatingBool = stillInTreatment === 'yes';
+  const missedWorkBool    = missedWork === 'yes_missed' || missedWork === 'yes_cant_work';
+  const hasAttorneyBool   = hasAttorney === 'yes';
+  const insuranceContacted = insuranceContact === 'they_contacted' || insuranceContact === 'got_letter';
+
   let leadId: number | null = null;
 
   try {
@@ -161,16 +169,16 @@ export async function POST(req: NextRequest) {
     `).run(
       String(name  ?? '').trim(),
       phone,
-      String(carrier   ?? ''),
-      String(injuryType ?? 'soft_tissue'),
-      surgery           ? 1 : 0,
-      hospitalized      ? 1 : 0,
-      stillInTreatment  ? 1 : 0,
-      missedWork        ? 1 : 0,
-      missedWorkDays != null ? Number(missedWorkDays) : null,
-      Number(lostWages  ?? 0),
-      hasAttorney === 'yes'               ? 1 : 0,
-      insuranceContact === 'yes_i_contacted' ? 1 : 0,
+      String(carrier       ?? ''),
+      String(injuryType    ?? 'soft_tissue'),
+      hasSurgeryBool   ? 1 : 0,
+      hospitalizedBool ? 1 : 0,
+      stillTreatingBool ? 1 : 0,
+      missedWorkBool   ? 1 : 0,
+      null,                        // missed_work_days no longer collected
+      Number(lostWages ?? 0),
+      hasAttorneyBool     ? 1 : 0,
+      insuranceContacted  ? 1 : 0,
       finalLow,
       finalHigh,
       score,

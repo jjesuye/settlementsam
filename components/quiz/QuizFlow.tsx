@@ -317,20 +317,19 @@ export function QuizFlow() {
 
     try {
       const body: Record<string, unknown> = {
-        phone:       cleanPhone,
-        code:        code.replace(/\s/g, ''),
-        name:        `${firstName.trim()} ${lastName.trim()}`,
-        email:       email.trim(),
+        ...answers,
+        phone:        cleanPhone,
+        code:         code.replace(/\s/g, ''),
+        name:         `${firstName.trim()} ${lastName.trim()}`,
+        email:        email.trim(),
         carrier,
         injuryType,
-        surgery:     answers.hasSurgery,
-        lostWages:   answers.lostWages,
+        surgery:      answers.hasSurgery,
         estimateLow:  est.low,
         estimateHigh: est.high,
         score,
         tier,
-        source:      'quiz',
-        ...answers,
+        source:       'quiz',
       };
       const res  = await fetch('/api/verify-code', {
         method:  'POST',
