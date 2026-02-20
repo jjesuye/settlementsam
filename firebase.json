@@ -9,8 +9,8 @@
     "frameworksBackend": {
       "region": "us-central1",
       "secretEnvironmentVariables": [
-        { "key": "FIREBASE_PRIVATE_KEY",  "secret": "FIREBASE_PRIVATE_KEY"  },
-        { "key": "FIREBASE_CLIENT_EMAIL", "secret": "FIREBASE_CLIENT_EMAIL" },
+        { "key": "FIREBASE_PRIVATE_KEY",  "secret": "SA_PRIVATE_KEY"   },
+        { "key": "FIREBASE_CLIENT_EMAIL", "secret": "SA_CLIENT_EMAIL"  },
         { "key": "GMAIL_APP_PASSWORD",    "secret": "GMAIL_APP_PASSWORD"    },
         { "key": "JWT_SECRET",            "secret": "JWT_SECRET"            },
         { "key": "ADMIN_PASSWORD_HASH",   "secret": "ADMIN_PASSWORD_HASH"   },

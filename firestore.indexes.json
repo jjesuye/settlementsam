@@ -24,20 +24,6 @@
         { "fieldPath": "attempted_at", "order": "ASCENDING" },
         { "fieldPath": "success",      "order": "ASCENDING" }
       ]
-    },
-    {
-      "collectionGroup": "leads",
-      "queryScope": "COLLECTION",
-      "fields": [
-        { "fieldPath": "timestamp", "order": "DESCENDING" }
-      ]
-    },
-    {
-      "collectionGroup": "clients",
-      "queryScope": "COLLECTION",
-      "fields": [
-        { "fieldPath": "created_at", "order": "DESCENDING" }
-      ]
     }
   ],
   "fieldOverrides": []
