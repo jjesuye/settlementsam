@@ -5,7 +5,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import jwt from 'jsonwebtoken';
-import { db } from '@/lib/db';
+import { adminDb } from '@/lib/firebase/admin';
 
 const JWT_SECRET = process.env.JWT_SECRET ?? 'dev-secret-change-in-production';
 
@@ -21,7 +21,8 @@ function verifyAdmin(req: NextRequest): boolean {
 export async function GET(req: NextRequest) {
   if (!verifyAdmin(req)) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
 
-  const clients = db.prepare('SELECT * FROM clients ORDER BY created_at DESC').all();
+  const snap    = await adminDb.collection('clients').orderBy('created_at', 'desc').get();
+  const clients = snap.docs.map(d => ({ id: d.id, ...d.data() }));
   return NextResponse.json({ clients });
 }
 
@@ -36,25 +37,39 @@ export async function POST(req: NextRequest) {
   const { name, firm, email, sheets_id } = body;
 
   if (!name || !firm || !email) {
-    return NextResponse.json({ error: 'invalid_input', message: 'name, firm, and email are required.' }, { status: 400 });
+    return NextResponse.json(
+      { error: 'invalid_input', message: 'name, firm, and email are required.' },
+      { status: 400 },
+    );
   }
 
-  try {
-    const result = db.prepare(`
-      INSERT INTO clients (name, firm, email, sheets_id, created_at)
-      VALUES (?, ?, ?, ?, ?)
-    `).run(
-      String(name), String(firm), String(email),
-      sheets_id ? String(sheets_id) : null,
-      Date.now(),
+  // Email uniqueness check
+  const existing = await adminDb
+    .collection('clients')
+    .where('email', '==', String(email))
+    .limit(1)
+    .get();
+
+  if (!existing.empty) {
+    return NextResponse.json(
+      { error: 'duplicate', message: 'A client with that email already exists.' },
+      { status: 409 },
     );
-    const client = db.prepare('SELECT * FROM clients WHERE id = ?').get(result.lastInsertRowid);
-    return NextResponse.json({ client }, { status: 201 });
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : 'Unknown error';
-    if (msg.includes('UNIQUE')) {
-      return NextResponse.json({ error: 'duplicate', message: 'A client with that email already exists.' }, { status: 409 });
-    }
-    return NextResponse.json({ error: 'db_error', message: msg }, { status: 500 });
   }
+
+  const docRef = await adminDb.collection('clients').add({
+    name:               String(name),
+    firm:               String(firm),
+    email:              String(email),
+    sheets_id:          sheets_id ? String(sheets_id) : null,
+    leads_purchased:    0,
+    leads_delivered:    0,
+    leads_replaced:     0,
+    balance:            0,
+    stripe_customer_id: null,
+    created_at:         Date.now(),
+  });
+
+  const doc = await docRef.get();
+  return NextResponse.json({ client: { id: doc.id, ...doc.data() } }, { status: 201 });
 }

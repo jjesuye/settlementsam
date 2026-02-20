@@ -5,7 +5,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import jwt from 'jsonwebtoken';
-import { db } from '@/lib/db';
+import { adminDb } from '@/lib/firebase/admin';
 import { CARRIERS } from '@/lib/sms';
 
 const JWT_SECRET = process.env.JWT_SECRET ?? 'dev-secret-change-in-production';
@@ -22,34 +22,40 @@ function verifyAdmin(req: NextRequest): boolean {
 export async function GET(req: NextRequest) {
   if (!verifyAdmin(req)) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
 
-  const total    = (db.prepare('SELECT COUNT(*) AS n FROM verification_codes').get() as { n: number }).n;
-  const verified = (db.prepare('SELECT COUNT(*) AS n FROM verification_codes WHERE used = 1').get() as { n: number }).n;
-  const expired  = (db.prepare('SELECT COUNT(*) AS n FROM verification_codes WHERE used = 0 AND expires_at < ?').get(Date.now()) as { n: number }).n;
-  const pending  = total - verified - expired;
+  const vcodes = adminDb.collection('verification_codes');
 
-  // Carrier breakdown from leads table
-  const carrierRows = db.prepare(`
-    SELECT carrier, COUNT(*) AS count
-    FROM leads
-    WHERE carrier != ''
-    GROUP BY carrier
-    ORDER BY count DESC
-  `).all() as { carrier: string; count: number }[];
+  const [totalSnap, verifiedSnap, allCodesSnap, carrierSnap, failedSnap] = await Promise.all([
+    vcodes.count().get(),
+    vcodes.where('used', '==', true).count().get(),
+    vcodes.where('used', '==', false).select('expires_at').get(),
+    adminDb.collection('leads').select('carrier').get(),
+    vcodes.where('attempts', '>', 2).orderBy('attempts', 'desc').limit(20).get(),
+  ]);
 
-  const carrierBreakdown = carrierRows.map(r => ({
-    gateway: r.carrier,
-    label:   CARRIERS[r.carrier] ?? r.carrier,
-    count:   r.count,
-  }));
+  const total    = totalSnap.data().count;
+  const verified = verifiedSnap.data().count;
 
-  // Recent failed attempts
-  const recentFailed = db.prepare(`
-    SELECT phone, attempts, created_at, expires_at, used
-    FROM verification_codes
-    WHERE attempts > 2
-    ORDER BY created_at DESC
-    LIMIT 20
-  `).all();
+  // Count expired in memory (avoids compound inequality index requirement)
+  const now     = Date.now();
+  const expired = allCodesSnap.docs.filter(d => (d.data().expires_at as number) < now).length;
+  const pending = total - verified - expired;
+
+  // Carrier breakdown from leads
+  const carrierMap: Record<string, number> = {};
+  for (const doc of carrierSnap.docs) {
+    const c = String(doc.data().carrier ?? '');
+    if (c) carrierMap[c] = (carrierMap[c] ?? 0) + 1;
+  }
+
+  const carrierBreakdown = Object.entries(carrierMap)
+    .sort((a, b) => b[1] - a[1])
+    .map(([gateway, count]) => ({
+      gateway,
+      label: CARRIERS[gateway] ?? gateway,
+      count,
+    }));
+
+  const recentFailed = failedSnap.docs.map(d => ({ id: d.id, ...d.data() }));
 
   return NextResponse.json({
     total, verified, expired, pending,

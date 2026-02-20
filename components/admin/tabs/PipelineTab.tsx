@@ -20,10 +20,10 @@ interface Stats {
 }
 
 interface LeadRow {
-  id: number; name: string; phone: string; injury_type: string;
-  surgery: number; lost_wages: number; estimate_low: number; estimate_high: number;
-  score: number; tier: string; verified: number; source: string;
-  timestamp: number; delivered: number; disputed: number;
+  id: string; name: string; phone: string; injury_type: string;
+  surgery: boolean; lost_wages_estimate: number; estimate_low: number; estimate_high: number;
+  score: number; tier: string; verified: boolean; source: string;
+  timestamp: number; delivered: boolean; disputed: boolean;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -66,7 +66,7 @@ function StatCard({ label, value, sub, mod }: { label: string; value: string | n
 
 // ── PipelineTab ───────────────────────────────────────────────────────────────
 
-export function PipelineTab({ onViewLead }: { onViewLead: (id: number) => void }) {
+export function PipelineTab({ onViewLead }: { onViewLead: (id: string) => void }) {
   const [stats,   setStats]   = useState<Stats | null>(null);
   const [leads,   setLeads]   = useState<LeadRow[]>([]);
   const [total,   setTotal]   = useState(0);

@@ -9,14 +9,13 @@
     "lint": "next lint",
     "test": "jest --passWithNoTests",
     "test:watch": "jest --watch",
-    "db:migrate": "node -r ts-node/register lib/db/migrate.ts",
-    "admin:setup": "ts-node --project tsconfig.json scripts/admin-setup.ts setup",
-    "admin:hash-password": "ts-node --project tsconfig.json scripts/admin-setup.ts hash-password",
-    "admin:reset-password": "ts-node --project tsconfig.json scripts/admin-setup.ts reset-password"
+    "setup-admin": "ts-node --project tsconfig.json scripts/setup-admin.ts"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
     "date-fns": "^3.6.0",
+    "firebase": "^12.9.0",
+    "firebase-admin": "^13.6.1",
     "framer-motion": "^11.3.24",
     "googleapis": "^140.0.1",
     "jsonwebtoken": "^9.0.2",

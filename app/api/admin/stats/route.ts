@@ -6,7 +6,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import jwt from 'jsonwebtoken';
-import { db } from '@/lib/db';
+import { adminDb } from '@/lib/firebase/admin';
 
 const JWT_SECRET = process.env.JWT_SECRET ?? 'dev-secret-change-in-production';
 
@@ -22,30 +22,49 @@ function verifyAdmin(req: NextRequest): boolean {
 export async function GET(req: NextRequest) {
   if (!verifyAdmin(req)) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
 
-  const total     = (db.prepare('SELECT COUNT(*) AS n FROM leads').get() as { n: number }).n;
-  const verified  = (db.prepare('SELECT COUNT(*) AS n FROM leads WHERE verified = 1').get() as { n: number }).n;
-  const hot       = (db.prepare("SELECT COUNT(*) AS n FROM leads WHERE tier = 'HOT'").get() as { n: number }).n;
-  const warm      = (db.prepare("SELECT COUNT(*) AS n FROM leads WHERE tier = 'WARM'").get() as { n: number }).n;
-  const cold      = (db.prepare("SELECT COUNT(*) AS n FROM leads WHERE tier = 'COLD'").get() as { n: number }).n;
-  const delivered = (db.prepare('SELECT COUNT(*) AS n FROM leads WHERE delivered = 1').get() as { n: number }).n;
-  const disputed  = (db.prepare('SELECT COUNT(*) AS n FROM leads WHERE disputed = 1').get() as { n: number }).n;
+  const leads  = adminDb.collection('leads');
+  const vcodes = adminDb.collection('verification_codes');
+  const since7d = Date.now() - 7 * 24 * 60 * 60 * 1_000;
 
-  // Last 7 days
-  const since7d  = Date.now() - 7 * 24 * 60 * 60 * 1_000;
-  const recent7d = (db.prepare('SELECT COUNT(*) AS n FROM leads WHERE timestamp > ?').get(since7d) as { n: number }).n;
+  const [
+    totalSnap, verifiedSnap, hotSnap, warmSnap, coldSnap,
+    deliveredSnap, disputedSnap, recent7dSnap,
+    smsSentSnap, smsUsedSnap, verifiedScoreSnap,
+  ] = await Promise.all([
+    leads.count().get(),
+    leads.where('verified', '==', true).count().get(),
+    leads.where('tier', '==', 'HOT').count().get(),
+    leads.where('tier', '==', 'WARM').count().get(),
+    leads.where('tier', '==', 'COLD').count().get(),
+    leads.where('delivered', '==', true).count().get(),
+    leads.where('disputed', '==', true).count().get(),
+    leads.where('timestamp', '>', since7d).count().get(),
+    vcodes.count().get(),
+    vcodes.where('used', '==', true).count().get(),
+    leads.where('verified', '==', true).select('score').get(),
+  ]);
 
-  // SMS stats
-  const smsSent  = (db.prepare('SELECT COUNT(*) AS n FROM verification_codes').get() as { n: number }).n;
-  const smsUsed  = (db.prepare('SELECT COUNT(*) AS n FROM verification_codes WHERE used = 1').get() as { n: number }).n;
+  const total     = totalSnap.data().count;
+  const verified  = verifiedSnap.data().count;
+  const hot       = hotSnap.data().count;
+  const warm      = warmSnap.data().count;
+  const cold      = coldSnap.data().count;
+  const delivered = deliveredSnap.data().count;
+  const disputed  = disputedSnap.data().count;
+  const recent7d  = recent7dSnap.data().count;
+  const smsSent   = smsSentSnap.data().count;
+  const smsUsed   = smsUsedSnap.data().count;
 
-  // Avg score
-  const avgScore = (db.prepare('SELECT AVG(score) AS avg FROM leads WHERE verified = 1').get() as { avg: number | null }).avg ?? 0;
+  const scores   = verifiedScoreSnap.docs.map(d => Number(d.data().score ?? 0));
+  const avgScore = scores.length > 0
+    ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length)
+    : 0;
 
   return NextResponse.json({
     total, verified, hot, warm, cold,
     delivered, disputed, recent7d,
     smsSent, smsUsed,
-    avgScore: Math.round(avgScore),
+    avgScore,
     conversionRate: total > 0 ? Math.round((verified / total) * 100) : 0,
   });
 }

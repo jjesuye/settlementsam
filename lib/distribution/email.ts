@@ -6,7 +6,7 @@
 
 import nodemailer from 'nodemailer';
 import { formatCurrency } from '@/lib/estimator/logic';
-import type { DbLead, DbClient } from '@/lib/db';
+import type { FsLead, FsClient } from '@/lib/firebase/types';
 
 const INJURY_LABELS: Record<string, string> = {
   soft_tissue: 'Soft Tissue (Sprains / Whiplash)',
@@ -16,7 +16,7 @@ const INJURY_LABELS: Record<string, string> = {
   other:       'Other / Multiple',
 };
 
-function bool(v: number | null) { return v ? 'Yes' : 'No'; }
+function bool(v: boolean | null) { return v ? 'Yes' : 'No'; }
 
 function createMailer() {
   return nodemailer.createTransport({
@@ -32,9 +32,9 @@ function createMailer() {
  * Sends a full lead profile email to the client's registered address.
  * Throws on SMTP failure so the caller can handle it.
  */
-export async function sendLeadEmail(lead: DbLead, client: DbClient): Promise<void> {
-  const mailer = createMailer();
-  const tier   = lead.tier;
+export async function sendLeadEmail(lead: FsLead & { id: string }, client: FsClient & { id: string }): Promise<void> {
+  const mailer    = createMailer();
+  const tier      = lead.tier;
   const tierEmoji = tier === 'HOT' ? '🔥' : tier === 'WARM' ? '⭐' : '🧊';
 
   const html = `
@@ -93,10 +93,9 @@ export async function sendLeadEmail(lead: DbLead, client: DbClient): Promise<voi
               <tr><td style="font-size:12px;color:#6B7C74;width:180px;">Injury Type</td><td style="font-size:13px;font-weight:600;color:#2C3E35;">${INJURY_LABELS[lead.injury_type] ?? lead.injury_type}</td></tr>
               <tr><td style="font-size:12px;color:#6B7C74;">Surgery</td>      <td style="font-size:13px;font-weight:600;color:#2C3E35;">${bool(lead.surgery)}</td></tr>
               <tr><td style="font-size:12px;color:#6B7C74;">Hospitalized</td> <td style="font-size:13px;font-weight:600;color:#2C3E35;">${bool(lead.hospitalized)}</td></tr>
-              <tr><td style="font-size:12px;color:#6B7C74;">In Treatment</td> <td style="font-size:13px;font-weight:600;color:#2C3E35;">${bool(lead.still_in_treatment)}</td></tr>
+              <tr><td style="font-size:12px;color:#6B7C74;">In Treatment</td> <td style="font-size:13px;font-weight:600;color:#2C3E35;">${bool(lead.still_treating)}</td></tr>
               <tr><td style="font-size:12px;color:#6B7C74;">Missed Work</td>  <td style="font-size:13px;font-weight:600;color:#2C3E35;">${bool(lead.missed_work)}</td></tr>
-              ${lead.missed_work_days ? `<tr><td style="font-size:12px;color:#6B7C74;">Days Missed</td><td style="font-size:13px;font-weight:600;color:#2C3E35;">${lead.missed_work_days} days</td></tr>` : ''}
-              <tr><td style="font-size:12px;color:#6B7C74;">Lost Wages</td>   <td style="font-size:13px;font-weight:600;color:#2C3E35;">${lead.lost_wages > 0 ? formatCurrency(lead.lost_wages) : '$0'}</td></tr>
+              <tr><td style="font-size:12px;color:#6B7C74;">Lost Wages</td>   <td style="font-size:13px;font-weight:600;color:#2C3E35;">${lead.lost_wages_estimate > 0 ? formatCurrency(lead.lost_wages_estimate) : '$0'}</td></tr>
             </table>
           </td></tr>
         </table>

@@ -15,7 +15,8 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import jwt from 'jsonwebtoken';
-import { db } from '@/lib/db';
+import { adminDb } from '@/lib/firebase/admin';
+import type { FsLead } from '@/lib/firebase/types';
 
 const JWT_SECRET = process.env.JWT_SECRET ?? 'dev-secret-change-in-production';
 
@@ -42,31 +43,39 @@ export async function GET(req: NextRequest) {
   const search   = searchParams.get('search')   ?? '';
   const page     = Math.max(1, parseInt(searchParams.get('page')  ?? '1'));
   const limit    = Math.min(200, parseInt(searchParams.get('limit') ?? '50'));
-  const offset   = (page - 1) * limit;
 
-  const conditions: string[] = [];
-  const params: (string | number | null)[] = [];
+  // Fetch all leads ordered by timestamp, then filter in memory
+  const snap = await adminDb.collection('leads').orderBy('timestamp', 'desc').get();
+  let leads  = snap.docs.map(d => ({ id: d.id, ...d.data() } as FsLead & { id: string }));
 
-  if (tier)     { conditions.push('tier = ?');     params.push(tier); }
-  if (source)   { conditions.push('source = ?');   params.push(source); }
-  if (verified !== '') { conditions.push('verified = ?'); params.push(Number(verified)); }
-  if (search)   {
-    conditions.push('(name LIKE ? OR phone LIKE ?)');
-    params.push(`%${search}%`, `%${search}%`);
+  if (tier)             leads = leads.filter(l => l.tier === tier);
+  if (source)           leads = leads.filter(l => l.source === source);
+  if (verified !== '')  leads = leads.filter(l => l.verified === (verified === '1'));
+  if (search) {
+    const s = search.toLowerCase();
+    leads = leads.filter(l => l.name.toLowerCase().includes(s) || l.phone.includes(s));
   }
 
-  const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+  const total     = leads.length;
+  const offset    = (page - 1) * limit;
+  const pageLeads = leads.slice(offset, offset + limit).map(l => ({
+    id:                  l.id,
+    name:                l.name,
+    phone:               l.phone,
+    injury_type:         l.injury_type,
+    surgery:             l.surgery,
+    hospitalized:        l.hospitalized,
+    lost_wages_estimate: l.lost_wages_estimate,
+    estimate_low:        l.estimate_low,
+    estimate_high:       l.estimate_high,
+    score:               l.score,
+    tier:                l.tier,
+    verified:            l.verified,
+    source:              l.source,
+    timestamp:           l.timestamp,
+    delivered:           l.delivered,
+    disputed:            l.disputed,
+  }));
 
-  const total = (db.prepare(`SELECT COUNT(*) AS n FROM leads ${where}`).get(...params) as { n: number }).n;
-
-  const rows = db.prepare(
-    `SELECT id, name, phone, injury_type, surgery, hospitalized,
-            lost_wages, estimate_low, estimate_high,
-            score, tier, verified, source, timestamp, delivered, disputed
-     FROM leads ${where}
-     ORDER BY timestamp DESC
-     LIMIT ? OFFSET ?`
-  ).all(...params, limit, offset);
-
-  return NextResponse.json({ leads: rows, total, page, limit });
+  return NextResponse.json({ leads: pageLeads, total, page, limit });
 }

@@ -2,21 +2,22 @@
  * POST /api/distribute
  *
  * Distributes a verified lead to its assigned client via email (and optionally
- * Google Sheets). Enforces duplicate-delivery prevention and logs to SQLite.
+ * Google Sheets). Enforces duplicate-delivery prevention and logs to Firestore.
  *
- * Body: { leadId: number, clientId?: number, method?: 'email' | 'sheets' | 'both' }
+ * Body: { leadId: string, clientId?: string, method?: 'email' | 'sheets' | 'both' }
  *
- * Response 200: { success: true, method: string, deliveryId: number }
+ * Response 200: { success: true, method: string, deliveryId: string }
  * Response 400: { error: string, message: string }
  * Response 409: { error: 'already_delivered', message: string }
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import jwt from 'jsonwebtoken';
-import { db } from '@/lib/db';
-import type { DbLead, DbClient } from '@/lib/db';
-import { sendLeadEmail }          from '@/lib/distribution/email';
-import { appendLeadToSheet }      from '@/lib/distribution/sheets';
+import { adminDb } from '@/lib/firebase/admin';
+import { FieldValue } from 'firebase-admin/firestore';
+import type { FsLead, FsClient } from '@/lib/firebase/types';
+import { sendLeadEmail }     from '@/lib/distribution/email';
+import { appendLeadToSheet } from '@/lib/distribution/sheets';
 
 const JWT_SECRET = process.env.JWT_SECRET ?? 'dev-secret-change-in-production';
 
@@ -42,31 +43,37 @@ export async function POST(req: NextRequest) {
   if (!leadId) return NextResponse.json({ error: 'invalid_input', message: 'leadId is required.' }, { status: 400 });
 
   // ── Fetch lead ────────────────────────────────────────────────────────────────
-  const lead = db.prepare('SELECT * FROM leads WHERE id = ?').get(Number(leadId)) as DbLead | undefined;
-  if (!lead) return NextResponse.json({ error: 'not_found', message: 'Lead not found.' }, { status: 404 });
+  const leadDoc = await adminDb.collection('leads').doc(String(leadId)).get();
+  if (!leadDoc.exists) return NextResponse.json({ error: 'not_found', message: 'Lead not found.' }, { status: 404 });
+
+  const lead = { id: leadDoc.id, ...leadDoc.data() } as FsLead & { id: string };
 
   // ── Duplicate check ───────────────────────────────────────────────────────────
   if (lead.delivered) {
     return NextResponse.json(
-      { error: 'already_delivered', message: `Lead #${lead.id} was already delivered.` },
+      { error: 'already_delivered', message: `Lead ${lead.id} was already delivered.` },
       { status: 409 },
     );
   }
 
   // ── Resolve client ────────────────────────────────────────────────────────────
-  const resolvedClientId = clientId ?? lead.client_id;
+  const resolvedClientId = String(clientId ?? lead.client_id ?? '');
   if (!resolvedClientId) {
-    return NextResponse.json({ error: 'no_client', message: 'No client assigned to this lead. Set clientId or assign via lead profile.' }, { status: 400 });
+    return NextResponse.json(
+      { error: 'no_client', message: 'No client assigned to this lead. Set clientId or assign via lead profile.' },
+      { status: 400 },
+    );
   }
 
-  const client = db.prepare('SELECT * FROM clients WHERE id = ?').get(Number(resolvedClientId)) as DbClient | undefined;
-  if (!client) return NextResponse.json({ error: 'client_not_found', message: 'Client not found.' }, { status: 404 });
+  const clientDoc = await adminDb.collection('clients').doc(resolvedClientId).get();
+  if (!clientDoc.exists) return NextResponse.json({ error: 'client_not_found', message: 'Client not found.' }, { status: 404 });
+
+  const client = { id: clientDoc.id, ...clientDoc.data() } as FsClient & { id: string };
 
   // ── Deliver ───────────────────────────────────────────────────────────────────
   const deliveryMethod = String(method);
   const errors: string[] = [];
 
-  // Email delivery
   if (deliveryMethod === 'email' || deliveryMethod === 'both') {
     try {
       await sendLeadEmail(lead, client);
@@ -75,7 +82,6 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // Google Sheets delivery
   if ((deliveryMethod === 'sheets' || deliveryMethod === 'both') && client.sheets_id) {
     try {
       await appendLeadToSheet(client.sheets_id, lead);
@@ -88,22 +94,30 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'delivery_failed', message: errors.join('; ') }, { status: 500 });
   }
 
-  // ── Mark delivered in DB ─────────────────────────────────────────────────────
-  const now = Date.now();
-  db.prepare('UPDATE leads SET delivered = 1, client_id = ? WHERE id = ?').run(Number(resolvedClientId), lead.id);
-  db.prepare('UPDATE clients SET leads_delivered = leads_delivered + 1 WHERE id = ?').run(Number(resolvedClientId));
+  // ── Mark delivered in Firestore ───────────────────────────────────────────────
+  await adminDb.collection('leads').doc(lead.id).update({
+    delivered: true,
+    client_id: resolvedClientId,
+  });
 
-  const deliveryResult = db.prepare(`
-    INSERT INTO deliveries (lead_id, client_id, method, delivered_at, status)
-    VALUES (?, ?, ?, ?, 'delivered')
-  `).run(lead.id, Number(resolvedClientId), deliveryMethod, now);
+  await adminDb.collection('clients').doc(resolvedClientId).update({
+    leads_delivered: FieldValue.increment(1),
+  });
 
-  console.log(`[distribute] ✓ Lead #${lead.id} → Client #${resolvedClientId} via ${deliveryMethod}`);
+  const deliveryRef = await adminDb.collection('deliveries').add({
+    lead_id:      lead.id,
+    client_id:    resolvedClientId,
+    method:       deliveryMethod,
+    delivered_at: Date.now(),
+    status:       'delivered',
+  });
+
+  console.log(`[distribute] ✓ Lead ${lead.id} → Client ${resolvedClientId} via ${deliveryMethod}`);
 
   return NextResponse.json({
     success:    true,
     method:     deliveryMethod,
-    deliveryId: deliveryResult.lastInsertRowid,
+    deliveryId: deliveryRef.id,
     errors:     errors.length > 0 ? errors : undefined,
   });
 }

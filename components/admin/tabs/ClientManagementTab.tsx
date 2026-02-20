@@ -8,7 +8,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { adminFetch } from '@/lib/admin/auth';
-import type { DbClient } from '@/lib/db';
+import type { FsClient as DbClient } from '@/lib/firebase/types';
 
 // ── ClientCard ────────────────────────────────────────────────────────────────
 function ClientCard({
@@ -18,11 +18,11 @@ function ClientCard({
   pushing,
   invoicing,
 }: {
-  client:    DbClient;
-  onPushSheets: (id: number) => void;
-  onInvoice:    (id: number) => void;
-  pushing:   number | null;
-  invoicing: number | null;
+  client:    DbClient & { id: string };
+  onPushSheets: (id: string) => void;
+  onInvoice:    (id: string) => void;
+  pushing:   string | null;
+  invoicing: string | null;
 }) {
   return (
     <motion.div
@@ -62,7 +62,7 @@ function ClientCard({
           { label: 'Leads Purchased', value: client.leads_purchased },
           { label: 'Leads Delivered', value: client.leads_delivered },
           { label: 'Replaced',        value: client.leads_replaced  },
-          { label: 'Balance',         value: `$${((client.balance ?? 0) / 100).toLocaleString()}`, color: 'var(--ss-gold)' },
+          { label: 'Balance',         value: `$${(client.balance ?? 0).toLocaleString()}`, color: 'var(--ss-gold)' },
         ].map(f => (
           <div key={f.label}>
             <div className="sa-field-key">{f.label}</div>
@@ -83,11 +83,11 @@ function ClientCard({
 // ── ClientManagementTab ───────────────────────────────────────────────────────
 
 export function ClientManagementTab() {
-  const [clients,   setClients]   = useState<DbClient[]>([]);
+  const [clients,   setClients]   = useState<(DbClient & { id: string })[]>([]);
   const [loading,   setLoading]   = useState(true);
   const [showForm,  setShowForm]  = useState(false);
-  const [pushing,   setPushing]   = useState<number | null>(null);
-  const [invoicing, setInvoicing] = useState<number | null>(null);
+  const [pushing,   setPushing]   = useState<string | null>(null);
+  const [invoicing, setInvoicing] = useState<string | null>(null);
   const [msg,       setMsg]       = useState('');
 
   const [form, setForm] = useState({
@@ -122,7 +122,7 @@ export function ClientManagementTab() {
     }
   };
 
-  const handlePushSheets = async (clientId: number) => {
+  const handlePushSheets = async (clientId: string) => {
     setPushing(clientId);
     setMsg('');
     try {
@@ -139,7 +139,7 @@ export function ClientManagementTab() {
     }
   };
 
-  const handleInvoice = async (clientId: number) => {
+  const handleInvoice = async (clientId: string) => {
     setInvoicing(clientId);
     setMsg('');
     try {

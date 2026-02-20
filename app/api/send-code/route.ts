@@ -3,7 +3,7 @@
  *
  * Accepts { name, phone, carrier }
  * Validates inputs, enforces hourly rate limit, generates a 4-digit OTP,
- * stores it in SQLite, and sends it to the phone via carrier email-to-SMS.
+ * stores it in Firestore, and sends it to the phone via carrier email-to-SMS.
  *
  * Response 200: { success: true }
  * Response 400: { error: string, message: string }
@@ -12,7 +12,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/lib/db';
+import { adminDb } from '@/lib/firebase/admin';
 import {
   normalizePhone,
   generateCode,
@@ -39,7 +39,6 @@ export async function POST(req: NextRequest) {
 
   const { name: rawName, phone: rawPhone, carrier } = body;
 
-  // ── Input validation ────────────────────────────────────────────────────────
   const name = String(rawName ?? '').trim();
   if (name.length < 1) {
     return NextResponse.json(
@@ -65,30 +64,49 @@ export async function POST(req: NextRequest) {
 
   // ── Rate limiting: max 3 sends per phone per hour ───────────────────────────
   const windowStart = Date.now() - RATE_WINDOW_MS;
-  const recentCount = (db
-    .prepare('SELECT COUNT(*) AS n FROM verification_codes WHERE phone = ? AND created_at > ?')
-    .get(phone, windowStart) as { n: number }).n;
+  const recentSnap  = await adminDb
+    .collection('verification_codes')
+    .where('phone', '==', phone)
+    .where('timestamp', '>', windowStart)
+    .get();
 
-  if (recentCount >= MAX_SENDS_PER_HR) {
+  if (recentSnap.size >= MAX_SENDS_PER_HR) {
     return NextResponse.json(
       {
         error:   'too_many_requests',
-        message: `Too many codes sent to this number. Please wait an hour before trying again.`,
+        message: 'Too many codes sent to this number. Please wait an hour before trying again.',
       },
       { status: 429 },
     );
   }
 
   // ── Invalidate any active codes for this phone ──────────────────────────────
-  db.prepare('UPDATE verification_codes SET used = 1 WHERE phone = ? AND used = 0').run(phone);
+  const activeSnap = await adminDb
+    .collection('verification_codes')
+    .where('phone', '==', phone)
+    .where('used', '==', false)
+    .get();
+
+  if (!activeSnap.empty) {
+    const batch = adminDb.batch();
+    for (const doc of activeSnap.docs) {
+      batch.update(doc.ref, { used: true });
+    }
+    await batch.commit();
+  }
 
   // ── Generate & store code ───────────────────────────────────────────────────
   const code = generateCode();
   const now  = Date.now();
 
-  db.prepare(
-    'INSERT INTO verification_codes (phone, code, created_at, expires_at) VALUES (?, ?, ?, ?)',
-  ).run(phone, code, now, now + CODE_TTL_MS);
+  const codeRef = await adminDb.collection('verification_codes').add({
+    phone,
+    code,
+    timestamp:  now,
+    expires_at: now + CODE_TTL_MS,
+    attempts:   0,
+    used:       false,
+  });
 
   // ── Send via Gmail → carrier SMS gateway (or multi-blast) ──────────────────
   const carrierStr = String(carrier);
@@ -106,7 +124,7 @@ export async function POST(req: NextRequest) {
     console.error('[send-code] Mailer error:', msg);
 
     // Roll back the stored code so it doesn't count against rate limits
-    db.prepare('DELETE FROM verification_codes WHERE phone = ? AND code = ?').run(phone, code);
+    await codeRef.delete();
 
     return NextResponse.json(
       {

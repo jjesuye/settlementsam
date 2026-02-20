@@ -32,7 +32,7 @@ export default function AdminPage() {
   const router = useRouter();
   const [authed,   setAuthed]   = useState<boolean | null>(null); // null = checking
   const [tab,      setTab]      = useState<Tab>('pipeline');
-  const [leadId,   setLeadId]   = useState<number | null>(null);
+  const [leadId,   setLeadId]   = useState<string | null>(null);
 
   // Auth check on mount — redirect to /admin/login if not authenticated
   useEffect(() => {
@@ -67,7 +67,7 @@ export default function AdminPage() {
   }
 
   // ── Navigate to a lead's profile ─────────────────────────────────────────────
-  const viewLead = (id: number) => {
+  const viewLead = (id: string) => {
     setLeadId(id);
     setTab('leads');
   };

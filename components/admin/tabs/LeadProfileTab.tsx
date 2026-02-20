@@ -8,7 +8,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { adminFetch } from '@/lib/admin/auth';
 import { formatCurrency } from '@/lib/estimator/logic';
-import type { DbLead } from '@/lib/db';
+import type { FsLead as DbLead } from '@/lib/firebase/types';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -19,7 +19,7 @@ const INJURY_LABELS: Record<string, string> = {
   spinal:      'Spinal Cord Injury',
   other:       'Other / Multiple',
 };
-const bool = (v: number | null) => v ? 'Yes' : 'No';
+const bool = (v: boolean | null) => v ? 'Yes' : 'No';
 
 function FieldPair({ label, value }: { label: string; value: string | number }) {
   return (
@@ -32,13 +32,13 @@ function FieldPair({ label, value }: { label: string; value: string | number }) 
 
 // ── LeadProfileTab ────────────────────────────────────────────────────────────
 
-export function LeadProfileTab({ leadId, onBack }: { leadId: number | null; onBack: () => void }) {
-  const [lead,    setLead]    = useState<DbLead | null>(null);
+export function LeadProfileTab({ leadId, onBack }: { leadId: string | null; onBack: () => void }) {
+  const [lead,    setLead]    = useState<(DbLead & { id: string }) | null>(null);
   const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState(false);
   const [msg,     setMsg]     = useState('');
 
-  const fetchLead = useCallback(async (id: number) => {
+  const fetchLead = useCallback(async (id: string) => {
     setLoading(true);
     setMsg('');
     const res  = await adminFetch(`/api/admin/leads/${id}`);
@@ -84,7 +84,7 @@ export function LeadProfileTab({ leadId, onBack }: { leadId: number | null; onBa
     if (!lead) return;
     const res = await adminFetch(`/api/admin/leads/${lead.id}`, {
       method: 'POST',
-      body: JSON.stringify({ disputed: lead.disputed ? 0 : 1 }),
+      body: JSON.stringify({ disputed: !lead.disputed }),
     });
     if (res.ok) fetchLead(lead.id);
   };
@@ -204,12 +204,9 @@ export function LeadProfileTab({ leadId, onBack }: { leadId: number | null; onBa
           <FieldPair label="Injury Type"       value={INJURY_LABELS[lead.injury_type] ?? lead.injury_type} />
           <FieldPair label="Surgery"           value={bool(lead.surgery)} />
           <FieldPair label="Hospitalized"      value={bool(lead.hospitalized)} />
-          <FieldPair label="Still in Treatment" value={bool(lead.still_in_treatment)} />
+          <FieldPair label="Still in Treatment" value={bool(lead.still_treating)} />
           <FieldPair label="Missed Work"       value={bool(lead.missed_work)} />
-          {lead.missed_work_days != null && (
-            <FieldPair label="Days Missed" value={`${lead.missed_work_days} days`} />
-          )}
-          <FieldPair label="Lost Wages"        value={lead.lost_wages > 0 ? formatCurrency(lead.lost_wages) : '$0'} />
+          <FieldPair label="Lost Wages"        value={lead.lost_wages_estimate > 0 ? formatCurrency(lead.lost_wages_estimate) : '$0'} />
           <FieldPair label="Has Attorney"      value={bool(lead.has_attorney)} />
           <FieldPair label="Insurance Contacted" value={bool(lead.insurance_contacted)} />
         </div>

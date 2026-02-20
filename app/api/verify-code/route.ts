@@ -9,7 +9,7 @@
  *           receivedTreatment?, hospitalized?, hasSurgery?, stillInTreatment?,
  *           missedWork?, insuranceContact?, hasAttorney? }
  *
- * Validates OTP, marks it used, saves verified lead to SQLite (with quiz
+ * Validates OTP, marks it used, saves verified lead to Firestore (with quiz
  * scoring when source='quiz'), and returns a JWT session token.
  *
  * Response 200: { success: true, token: string }
@@ -19,8 +19,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import jwt from 'jsonwebtoken';
-import { db } from '@/lib/db';
-import type { DbVerificationCode } from '@/lib/db';
+import { adminDb } from '@/lib/firebase/admin';
 import { normalizePhone, MAX_ATTEMPTS } from '@/lib/sms';
 import { calculateScore, scoreTier, calculateQuizEstimate } from '@/lib/quiz/scoring';
 import type { QuizAnswers } from '@/lib/quiz/types';
@@ -45,13 +44,12 @@ export async function POST(req: NextRequest) {
     code,
     name,
     carrier,
-    injuryType,    // computed string passed from client ('spinal'|'fracture'|'soft_tissue')
-    surgery,       // widget compat: boolean
+    injuryType,
+    surgery,
     lostWages,
     estimateLow,
     estimateHigh,
     source = 'widget',
-    // Quiz QuizAnswers fields (spread from client)
     incidentType,
     incidentTimeframe,
     atFault,
@@ -62,6 +60,7 @@ export async function POST(req: NextRequest) {
     missedWork,
     insuranceContact,
     hasAttorney,
+    state: leadState,
   } = body;
 
   const phone = normalizePhone(String(rawPhone ?? ''));
@@ -73,24 +72,29 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // ── Fetch the most recent active code for this phone ────────────────────────
-  const record = db
-    .prepare(`
-      SELECT * FROM verification_codes
-      WHERE phone = ? AND used = 0 AND expires_at > ?
-      ORDER BY created_at DESC
-      LIMIT 1
-    `)
-    .get(phone, Date.now()) as DbVerificationCode | undefined;
+  // ── Fetch active codes for this phone ────────────────────────────────────────
+  const snap = await adminDb
+    .collection('verification_codes')
+    .where('phone', '==', phone)
+    .where('used', '==', false)
+    .get();
 
-  if (!record) {
+  const now         = Date.now();
+  const activeDocs  = snap.docs
+    .filter(d => (d.data().expires_at as number) > now)
+    .sort((a, b) => (b.data().timestamp as number) - (a.data().timestamp as number));
+
+  if (activeDocs.length === 0) {
     return NextResponse.json(
       { error: 'expired', message: "That code has expired. Hit 'Resend' to get a fresh one." },
       { status: 400 },
     );
   }
 
-  if (record.attempts >= MAX_ATTEMPTS) {
+  const record     = activeDocs[0];
+  const recordData = record.data();
+
+  if ((recordData.attempts as number) >= MAX_ATTEMPTS) {
     return NextResponse.json(
       { error: 'too_many_attempts', message: 'Too many wrong attempts. Request a new code.' },
       { status: 429 },
@@ -98,9 +102,9 @@ export async function POST(req: NextRequest) {
   }
 
   // ── Compare codes ────────────────────────────────────────────────────────────
-  if (String(record.code) !== String(code).trim()) {
-    db.prepare('UPDATE verification_codes SET attempts = attempts + 1 WHERE id = ?').run(record.id);
-    const attemptsUsed = record.attempts + 1;
+  if (String(recordData.code) !== String(code).trim()) {
+    await record.ref.update({ attempts: (recordData.attempts as number) + 1 });
+    const attemptsUsed = (recordData.attempts as number) + 1;
     const left         = MAX_ATTEMPTS - attemptsUsed;
 
     const message = left > 0
@@ -111,9 +115,9 @@ export async function POST(req: NextRequest) {
   }
 
   // ── Code matched — mark used ─────────────────────────────────────────────────
-  db.prepare('UPDATE verification_codes SET used = 1 WHERE id = ?').run(record.id);
+  await record.ref.update({ used: true });
 
-  // ── Build quiz answers object for scoring (quiz mode only) ───────────────────
+  // ── Build quiz answers for scoring (quiz mode only) ───────────────────────────
   const isQuiz = String(source) === 'quiz';
 
   let score     = 0;
@@ -124,7 +128,7 @@ export async function POST(req: NextRequest) {
   if (isQuiz) {
     const qa: QuizAnswers = {
       incidentType:      (incidentType      as QuizAnswers['incidentType'])      ?? null,
-      state:             (body.state        as string)                           ?? null,
+      state:             (leadState         as string)                           ?? null,
       incidentTimeframe: (incidentTimeframe as QuizAnswers['incidentTimeframe']) ?? null,
       atFault:           atFault            != null ? Boolean(atFault)           : null,
       receivedTreatment: (receivedTreatment as QuizAnswers['receivedTreatment']) ?? null,
@@ -145,48 +149,51 @@ export async function POST(req: NextRequest) {
     finalHigh = est.high;
   }
 
-  // ── Save verified lead ───────────────────────────────────────────────────────
-  // Derive boolean values from new string-typed fields
-  const hasSurgeryBool    = hasSurgery  != null ? Boolean(hasSurgery)  : Boolean(surgery);
-  const hospitalizedBool  = hospitalized != null ? Boolean(hospitalized) : false;
-  const stillTreatingBool = stillInTreatment === 'yes';
-  const missedWorkBool    = missedWork === 'yes_missed' || missedWork === 'yes_cant_work';
-  const hasAttorneyBool   = hasAttorney === 'yes';
-  const insuranceContacted = insuranceContact === 'they_contacted' || insuranceContact === 'got_letter';
+  // ── Derive boolean values ────────────────────────────────────────────────────
+  const hasSurgeryBool         = hasSurgery  != null ? Boolean(hasSurgery)  : Boolean(surgery);
+  const hospitalizedBool       = hospitalized != null ? Boolean(hospitalized) : false;
+  const stillTreatingBool      = stillInTreatment === 'yes';
+  const missedWorkBool         = missedWork === 'yes_missed' || missedWork === 'yes_cant_work';
+  const hasAttorneyBool        = hasAttorney === 'yes';
+  const insuranceContactedBool = insuranceContact === 'they_contacted' || insuranceContact === 'got_letter';
+  const atFaultBool            = Boolean(atFault);
 
-  let leadId: number | null = null;
+  // ── Save verified lead to Firestore ──────────────────────────────────────────
+  let leadId: string | null = null;
 
   try {
-    const result = db.prepare(`
-      INSERT INTO leads
-        (name, phone, carrier, injury_type,
-         surgery, hospitalized, still_in_treatment,
-         missed_work, missed_work_days, lost_wages,
-         has_attorney, insurance_contacted,
-         estimate_low, estimate_high,
-         score, tier, verified, source, timestamp)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
-    `).run(
-      String(name  ?? '').trim(),
+    const leadRef = await adminDb.collection('leads').add({
+      name:                String(name  ?? '').trim(),
       phone,
-      String(carrier       ?? ''),
-      String(injuryType    ?? 'soft_tissue'),
-      hasSurgeryBool   ? 1 : 0,
-      hospitalizedBool ? 1 : 0,
-      stillTreatingBool ? 1 : 0,
-      missedWorkBool   ? 1 : 0,
-      null,                        // missed_work_days no longer collected
-      Number(lostWages ?? 0),
-      hasAttorneyBool     ? 1 : 0,
-      insuranceContacted  ? 1 : 0,
-      finalLow,
-      finalHigh,
+      email:               null,
+      carrier:             String(carrier       ?? ''),
+      state:               String(leadState     ?? '') || null,
+      injury_type:         String(injuryType    ?? 'soft_tissue'),
+      surgery:             hasSurgeryBool,
+      hospitalized:        hospitalizedBool,
+      still_treating:      stillTreatingBool,
+      missed_work:         missedWorkBool,
+      lost_wages_estimate: Number(lostWages ?? 0),
+      has_attorney:        hasAttorneyBool,
+      insurance_contacted: insuranceContactedBool,
+      at_fault:            atFaultBool,
+      estimate_low:        finalLow,
+      estimate_high:       finalHigh,
       score,
       tier,
-      String(source ?? 'widget'),
-      Date.now(),
-    );
-    leadId = result.lastInsertRowid as number;
+      verified:            true,
+      source:              String(source ?? 'widget'),
+      timestamp:           now,
+      delivered:           false,
+      replaced:            false,
+      disputed:            false,
+      client_id:           null,
+      incident_timeframe:  String(incidentTimeframe ?? '') || null,
+      statute_warning:     false,
+      disqualified:        false,
+      disqualify_reason:   null,
+    });
+    leadId = leadRef.id;
   } catch (err: unknown) {
     console.error('[verify-code] Lead insert error:', err instanceof Error ? err.message : err);
   }

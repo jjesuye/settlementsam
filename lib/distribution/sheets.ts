@@ -12,17 +12,17 @@
 
 import { google } from 'googleapis';
 import { formatCurrency } from '@/lib/estimator/logic';
-import type { DbLead } from '@/lib/db';
+import type { FsLead } from '@/lib/firebase/types';
 
-const SHEET_RANGE  = 'Sheet1!A:R';
-const SCOPES       = ['https://www.googleapis.com/auth/spreadsheets'];
+const SHEET_RANGE = 'Sheet1!A:Q';
+const SCOPES      = ['https://www.googleapis.com/auth/spreadsheets'];
 
 const INJURY_LABELS: Record<string, string> = {
   soft_tissue: 'Soft Tissue', fracture: 'Fracture',
   tbi:         'TBI',         spinal:   'Spinal Cord', other: 'Other',
 };
 
-function bool(v: number | null) { return v ? 'Yes' : 'No'; }
+function bool(v: boolean | null) { return v ? 'Yes' : 'No'; }
 
 function getAuth() {
   const email = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
@@ -38,7 +38,7 @@ function getAuth() {
 /** The header row written once when the sheet is first created. */
 export const SHEET_HEADERS = [
   'ID', 'Name', 'Phone', 'Carrier', 'Injury Type', 'Surgery', 'Hospitalized',
-  'In Treatment', 'Missed Work', 'Days Missed', 'Lost Wages',
+  'In Treatment', 'Missed Work', 'Lost Wages',
   'Estimate Low', 'Estimate High', 'Score', 'Tier', 'Source',
   'Verified', 'Submitted',
 ];
@@ -47,20 +47,20 @@ export const SHEET_HEADERS = [
  * Ensures the header row exists (row 1). Idempotent — only writes if row 1 is empty.
  */
 export async function ensureSheetHeaders(sheetsId: string): Promise<void> {
-  const auth    = getAuth();
-  const sheets  = google.sheets({ version: 'v4', auth });
+  const auth   = getAuth();
+  const sheets = google.sheets({ version: 'v4', auth });
 
   const res = await sheets.spreadsheets.values.get({
     spreadsheetId: sheetsId,
-    range:         'Sheet1!A1:R1',
+    range:         'Sheet1!A1:Q1',
   });
 
   if (!res.data.values || res.data.values.length === 0) {
     await sheets.spreadsheets.values.append({
-      spreadsheetId:     sheetsId,
-      range:             SHEET_RANGE,
-      valueInputOption:  'RAW',
-      requestBody:       { values: [SHEET_HEADERS] },
+      spreadsheetId:    sheetsId,
+      range:            SHEET_RANGE,
+      valueInputOption: 'RAW',
+      requestBody:      { values: [SHEET_HEADERS] },
     });
   }
 }
@@ -69,7 +69,7 @@ export async function ensureSheetHeaders(sheetsId: string): Promise<void> {
  * Appends one lead row to the client's Google Sheet.
  * Returns the updated range string.
  */
-export async function appendLeadToSheet(sheetsId: string, lead: DbLead): Promise<string> {
+export async function appendLeadToSheet(sheetsId: string, lead: FsLead & { id: string }): Promise<string> {
   await ensureSheetHeaders(sheetsId);
 
   const auth   = getAuth();
@@ -83,10 +83,9 @@ export async function appendLeadToSheet(sheetsId: string, lead: DbLead): Promise
     INJURY_LABELS[lead.injury_type] ?? lead.injury_type,
     bool(lead.surgery),
     bool(lead.hospitalized),
-    bool(lead.still_in_treatment),
+    bool(lead.still_treating),
     bool(lead.missed_work),
-    lead.missed_work_days ?? '',
-    lead.lost_wages > 0 ? formatCurrency(lead.lost_wages) : '$0',
+    lead.lost_wages_estimate > 0 ? formatCurrency(lead.lost_wages_estimate) : '$0',
     formatCurrency(lead.estimate_low),
     formatCurrency(lead.estimate_high),
     lead.score,
@@ -97,23 +96,23 @@ export async function appendLeadToSheet(sheetsId: string, lead: DbLead): Promise
   ];
 
   const res = await sheets.spreadsheets.values.append({
-    spreadsheetId:     sheetsId,
-    range:             SHEET_RANGE,
-    valueInputOption:  'RAW',
-    insertDataOption:  'INSERT_ROWS',
-    requestBody:       { values: [row] },
+    spreadsheetId:    sheetsId,
+    range:            SHEET_RANGE,
+    valueInputOption: 'RAW',
+    insertDataOption: 'INSERT_ROWS',
+    requestBody:      { values: [row] },
   });
 
   return res.data.updates?.updatedRange ?? SHEET_RANGE;
 }
 
 /**
- * Pushes all undelivered leads for a given client to their sheet.
+ * Pushes all provided leads to the client's Google Sheet.
  * Returns the count of leads pushed.
  */
 export async function pushUndeliveredLeadsToSheet(
   sheetsId: string,
-  leads: DbLead[],
+  leads: (FsLead & { id: string })[],
 ): Promise<number> {
   let count = 0;
   for (const lead of leads) {
