@@ -44,3 +44,6 @@ logs/
 
 # ─── Generated PDFs (temp) ───────────────────────────────────────────────────────
 tmp/
+
+# Firebase build cache
+.firebase/
