@@ -9,7 +9,8 @@
     "lint": "next lint",
     "test": "jest --passWithNoTests",
     "test:watch": "jest --watch",
-    "setup-admin": "ts-node --project tsconfig.json scripts/setup-admin.ts"
+    "setup-admin": "ts-node --project tsconfig.json scripts/setup-admin.ts",
+    "admin:setup": "ts-node --project tsconfig.json scripts/setup-admin.ts"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
