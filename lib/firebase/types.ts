@@ -88,7 +88,7 @@ export interface FsLoginAttempt {
 
 export interface FsAdmin {
   id?: string;
-  email: string;
+  username: string;
   password_hash: string;
   created_at: number;        // Unix ms
 }

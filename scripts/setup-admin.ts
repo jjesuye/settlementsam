@@ -3,11 +3,11 @@
  * scripts/setup-admin.ts
  *
  * Creates or updates the admin account in the Firestore 'admins' collection.
- * Reads ADMIN_EMAIL and ADMIN_PASSWORD from .env (or prompts interactively).
+ * Prompts for username and password interactively.
  * Hashes the password with bcryptjs and saves to Firestore.
  *
  * Usage:
- *   npx ts-node --project tsconfig.json scripts/setup-admin.ts
+ *   npm run admin:setup
  */
 
 import * as readline from 'readline';
@@ -17,22 +17,20 @@ import bcrypt from 'bcryptjs';
 
 const SALT_ROUNDS = 12;
 
-// Load .env manually (ts-node doesn't auto-load it)
+// Load .env and .env.local manually (ts-node doesn't auto-load them)
 function loadEnv() {
-  const envPath = path.join(process.cwd(), '.env');
-  const envLocalPath = path.join(process.cwd(), '.env.local');
-  for (const p of [envPath, envLocalPath]) {
-    if (fs.existsSync(p)) {
-      const lines = fs.readFileSync(p, 'utf-8').split('\n');
-      for (const line of lines) {
-        const trimmed = line.trim();
-        if (!trimmed || trimmed.startsWith('#')) continue;
-        const eq = trimmed.indexOf('=');
-        if (eq < 0) continue;
-        const key = trimmed.slice(0, eq).trim();
-        const val = trimmed.slice(eq + 1).trim().replace(/^["']|["']$/g, '');
-        if (!process.env[key]) process.env[key] = val;
-      }
+  const files = ['.env', '.env.local'];
+  for (const file of files) {
+    const p = path.join(process.cwd(), file);
+    if (!fs.existsSync(p)) continue;
+    for (const line of fs.readFileSync(p, 'utf-8').split('\n')) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith('#')) continue;
+      const eq = trimmed.indexOf('=');
+      if (eq < 0) continue;
+      const key = trimmed.slice(0, eq).trim();
+      const val = trimmed.slice(eq + 1).trim().replace(/^["']|["']$/g, '');
+      if (!process.env[key]) process.env[key] = val;
     }
   }
 }
@@ -75,30 +73,20 @@ async function main() {
   console.log('║   Settlement Sam — Admin Setup (Firebase) ║');
   console.log('╚══════════════════════════════════════════╝\n');
 
-  // Get email
-  let email = process.env.ADMIN_EMAIL ?? '';
-  if (!email) {
-    email = await prompt('Admin email address: ');
-  } else {
-    console.log(`Using ADMIN_EMAIL from env: ${email}`);
-  }
-  if (!email.includes('@')) {
-    console.error('❌ Invalid email address.'); process.exit(1);
+  // Get username
+  const username = await prompt('Admin username: ');
+  if (!username || username.length < 3) {
+    console.error('❌ Username must be at least 3 characters.'); process.exit(1);
   }
 
   // Get password
-  let password = process.env.ADMIN_PASSWORD ?? '';
-  if (!password) {
-    password = await prompt('Admin password (min 12 chars): ', true);
-    if (password.length < 12) {
-      console.error('❌ Password must be at least 12 characters.'); process.exit(1);
-    }
-    const confirm = await prompt('Confirm password: ', true);
-    if (password !== confirm) {
-      console.error('❌ Passwords do not match.'); process.exit(1);
-    }
-  } else {
-    console.log('Using ADMIN_PASSWORD from env.');
+  const password = await prompt('Admin password (min 12 chars): ', true);
+  if (password.length < 12) {
+    console.error('❌ Password must be at least 12 characters.'); process.exit(1);
+  }
+  const confirm = await prompt('Confirm password: ', true);
+  if (password !== confirm) {
+    console.error('❌ Passwords do not match.'); process.exit(1);
   }
 
   console.log('\n⏳ Hashing password…');
@@ -106,7 +94,6 @@ async function main() {
 
   console.log('⏳ Connecting to Firestore…');
 
-  // Dynamically import Firebase Admin after env is loaded
   const { initializeApp, getApps, cert } = await import('firebase-admin/app');
   const { getFirestore } = await import('firebase-admin/firestore');
 
@@ -122,30 +109,22 @@ async function main() {
 
   const db = getFirestore();
 
-  // Upsert admin document
-  const existing = await db.collection('admins').where('email', '==', email).limit(1).get();
+  // Upsert by username
+  const existing = await db.collection('admins').where('username', '==', username).limit(1).get();
 
   if (!existing.empty) {
     await existing.docs[0].ref.update({ password_hash: passwordHash, updated_at: Date.now() });
-    console.log(`\n✅ Admin account updated in Firestore for ${email}`);
+    console.log(`\n✅ Admin account updated for username: ${username}`);
   } else {
     await db.collection('admins').add({
-      email,
+      username,
       password_hash: passwordHash,
       created_at:    Date.now(),
     });
-    console.log(`\n✅ Admin account created in Firestore for ${email}`);
+    console.log(`\n✅ Admin account created for username: ${username}`);
   }
 
-  const jwtSecret = require('crypto').randomBytes(48).toString('hex');
-
-  console.log('\n─'.repeat(60));
-  console.log('Also add these to your .env / Railway environment variables:\n');
-  console.log(`ADMIN_EMAIL=${email}`);
-  console.log(`JWT_SECRET=${jwtSecret}`);
-  console.log('─'.repeat(60));
-  console.log('\n✅ Done. Restart the server to apply changes.\n');
-
+  console.log('\n✅ Done. You can now log in at /admin/login\n');
   process.exit(0);
 }
 

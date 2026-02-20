@@ -120,7 +120,7 @@ function SetupRequired() {
 
 // ── Login form ────────────────────────────────────────────────────────────────
 function LoginForm({ onSuccess }: { onSuccess: () => void }) {
-  const [email,    setEmail]    = useState('');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [loading,  setLoading]  = useState(false);
   const [error,    setError]    = useState('');
@@ -143,7 +143,7 @@ function LoginForm({ onSuccess }: { onSuccess: () => void }) {
       const res  = await fetch('/api/admin/login', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ email: email.trim(), password }),
+        body:    JSON.stringify({ username: username.trim(), password }),
       });
       const data = await res.json();
 
@@ -201,15 +201,15 @@ function LoginForm({ onSuccess }: { onSuccess: () => void }) {
         {/* Form */}
         <form className="sa-form" onSubmit={handleSubmit}>
           <div>
-            <label className="sa-label" htmlFor="admin-email">Email</label>
+            <label className="sa-label" htmlFor="admin-username">Username</label>
             <input
-              id="admin-email"
+              id="admin-username"
               className="sa-input"
-              type="email"
+              type="text"
               autoComplete="username"
-              placeholder="admin@settlementsam.com"
-              value={email}
-              onChange={e => setEmail(e.target.value)}
+              placeholder="username"
+              value={username}
+              onChange={e => setUsername(e.target.value)}
               disabled={lockout > 0}
               required
             />
@@ -258,7 +258,7 @@ function LoginForm({ onSuccess }: { onSuccess: () => void }) {
           <button
             className="sa-submit"
             type="submit"
-            disabled={loading || lockout > 0 || !email || !password}
+            disabled={loading || lockout > 0 || !username || !password}
           >
             {loading ? 'Signing in…' : lockout > 0 ? `Locked (${lockout}s)` : 'Sign In →'}
           </button>

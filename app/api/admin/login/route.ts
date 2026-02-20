@@ -1,11 +1,10 @@
 /**
  * POST /api/admin/login
  *
- * Validates admin credentials. Checks Firestore 'admins' collection first,
- * then falls back to ADMIN_EMAIL / ADMIN_PASSWORD_HASH env vars.
+ * Validates admin credentials. Checks Firestore 'admins' collection by username.
  * Security features:
  *   - bcrypt hash comparison
- *   - Brute-force lockout: 5 failed attempts → 15-minute cooldown per email+IP
+ *   - Brute-force lockout: 5 failed attempts → 15-minute cooldown per username+IP
  *   - JWT with 24-hour expiry
  *
  * Response 200: { success: true, token: string }
@@ -19,10 +18,7 @@ import bcrypt from 'bcryptjs';
 import { adminDb } from '@/lib/firebase/admin';
 import type { FsAdmin } from '@/lib/firebase/types';
 
-const JWT_SECRET  = process.env.JWT_SECRET          ?? 'dev-secret-change-in-production';
-const ADMIN_EMAIL = process.env.ADMIN_EMAIL         ?? 'admin@settlementsam.com';
-const ADMIN_HASH  = process.env.ADMIN_PASSWORD_HASH ?? '';
-const ADMIN_PLAIN = process.env.ADMIN_PASSWORD      ?? 'changeme';
+const JWT_SECRET = process.env.JWT_SECRET ?? 'dev-secret-change-in-production';
 
 const TOKEN_TTL_S  = 60 * 60 * 24;
 const MAX_ATTEMPTS = 5;
@@ -37,19 +33,23 @@ function getClientIP(req: NextRequest): string {
 }
 
 export async function POST(req: NextRequest) {
-  let body: { email?: unknown; password?: unknown };
+  let body: { username?: unknown; password?: unknown };
   try {
     body = await req.json();
   } catch {
     return NextResponse.json({ error: 'invalid_json', message: 'Invalid request.' }, { status: 400 });
   }
 
-  const email      = String(body.email ?? '').trim().toLowerCase();
+  const username   = String(body.username ?? '').trim().toLowerCase();
   const ip         = getClientIP(req);
-  const identifier = `${email}::${ip}`;
+  const identifier = `${username}::${ip}`;
   const windowStart = Date.now() - LOCKOUT_MS;
 
-  // ── Check lockout ────────────────────────────────────────────────────────────
+  if (!username) {
+    return NextResponse.json({ error: 'invalid_credentials', message: 'Username is required.' }, { status: 401 });
+  }
+
+  // ── Check lockout ─────────────────────────────────────────────────────────────
   const failSnap = await adminDb
     .collection('login_attempts')
     .where('identifier', '==', identifier)
@@ -57,14 +57,10 @@ export async function POST(req: NextRequest) {
     .where('success', '==', false)
     .get();
 
-  const failCount = failSnap.size;
-
-  if (failCount >= MAX_ATTEMPTS) {
+  if (failSnap.size >= MAX_ATTEMPTS) {
     const sorted     = failSnap.docs.sort((a, b) => a.data().attempted_at - b.data().attempted_at);
     const oldest     = (sorted[0]?.data().attempted_at as number) ?? Date.now();
-    const unlockAt   = oldest + LOCKOUT_MS;
-    const retryAfter = Math.ceil((unlockAt - Date.now()) / 1_000);
-
+    const retryAfter = Math.ceil((oldest + LOCKOUT_MS - Date.now()) / 1_000);
     return NextResponse.json(
       {
         error:      'locked',
@@ -75,53 +71,40 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // ── Look up admin in Firestore, fall back to env vars ────────────────────────
-  let adminEmail = ADMIN_EMAIL;
-  let adminHash  = ADMIN_HASH;
-
+  // ── Look up admin by username in Firestore ────────────────────────────────────
   const adminSnap = await adminDb
     .collection('admins')
-    .where('email', '==', email)
+    .where('username', '==', username)
     .limit(1)
     .get();
 
-  if (!adminSnap.empty) {
-    const fsAdmin = adminSnap.docs[0].data() as FsAdmin;
-    adminEmail = fsAdmin.email;
-    adminHash  = fsAdmin.password_hash;
-  }
-
-  // ── Validate email ─────────────────────────────────────────────────────────
-  if (email !== adminEmail.toLowerCase()) {
+  if (adminSnap.empty) {
     await adminDb.collection('login_attempts').add({ identifier, attempted_at: Date.now(), success: false });
     return NextResponse.json(
-      { error: 'invalid_credentials', message: 'Invalid email or password.' },
+      { error: 'invalid_credentials', message: 'Invalid username or password.' },
       { status: 401 },
     );
   }
 
-  // ── Validate password ──────────────────────────────────────────────────────
-  let valid = false;
-  if (adminHash) {
-    valid = await bcrypt.compare(String(body.password ?? ''), adminHash);
-  } else {
-    valid = String(body.password ?? '') === ADMIN_PLAIN;
-  }
+  const fsAdmin = adminSnap.docs[0].data() as FsAdmin;
+
+  // ── Validate password ─────────────────────────────────────────────────────────
+  const valid = await bcrypt.compare(String(body.password ?? ''), fsAdmin.password_hash);
 
   if (!valid) {
     await adminDb.collection('login_attempts').add({ identifier, attempted_at: Date.now(), success: false });
-    const remaining = MAX_ATTEMPTS - (failCount + 1);
+    const remaining = MAX_ATTEMPTS - (failSnap.size + 1);
     const msg = remaining > 0
-      ? `Invalid email or password. ${remaining} attempt${remaining !== 1 ? 's' : ''} remaining before lockout.`
-      : 'Invalid email or password. Account is now locked for 15 minutes.';
+      ? `Invalid username or password. ${remaining} attempt${remaining !== 1 ? 's' : ''} remaining.`
+      : 'Invalid username or password. Account is now locked for 15 minutes.';
     return NextResponse.json({ error: 'invalid_credentials', message: msg }, { status: 401 });
   }
 
-  // ── Success — record attempt and issue JWT ────────────────────────────────────
+  // ── Success ───────────────────────────────────────────────────────────────────
   await adminDb.collection('login_attempts').add({ identifier, attempted_at: Date.now(), success: true });
 
   const token = jwt.sign(
-    { role: 'admin', email: adminEmail },
+    { role: 'admin', username: fsAdmin.username },
     JWT_SECRET,
     { expiresIn: TOKEN_TTL_S },
   );
