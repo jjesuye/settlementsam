@@ -1,0 +1,26 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run dev:*)",
+      "Bash(npx next build:*)",
+      "Bash(npx tsc:*)",
+      "Bash(exit:*)",
+      "Bash(dir:*)",
+      "Bash(cmd.exe /c \"dir C:\\\\Users\\\\jjesu\\\\settlement-sam\\\\public\\\\images\\\\sam-icons\")",
+      "Bash(cmd.exe /c \"dir /s /b C:\\\\Users\\\\jjesu\\\\settlement-sam\\\\public\"\")",
+      "Bash(powershell -Command \"Copy-Item ''C:\\\\Users\\\\jjesu\\\\settlement-sam\\\\public\\\\images\\\\sam-icons\\\\Warm and Inviting Logo of Settlement Sam.png'' ''C:\\\\Users\\\\jjesu\\\\settlement-sam\\\\public\\\\images\\\\sam-icons\\\\sam-logo.png''; Copy-Item ''C:\\\\Users\\\\jjesu\\\\settlement-sam\\\\public\\\\images\\\\sam-icons\\\\Settlement_Sam_Icon_version_1.png'' ''C:\\\\Users\\\\jjesu\\\\settlement-sam\\\\public\\\\images\\\\sam-icons\\\\sam-icon.png''; Write-Host ''Done''\")",
+      "Bash(powershell -Command:*)",
+      "Bash(curl:*)",
+      "Bash(node:*)",
+      "mcp__ide__getDiagnostics",
+      "Bash(netstat:*)",
+      "Bash(cmd /c \"netstat -ano | findstr :3000\")",
+      "Bash(npm run admin:setup:*)",
+      "Bash(git init:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git config:*)",
+      "Bash(echo:*)"
+    ]
+  }
+}

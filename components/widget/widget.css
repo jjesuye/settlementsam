@@ -1,0 +1,581 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   Settlement Sam — Widget Styles
+   Brand: warm slate bg #2d3142 | coral CTAs #e8735a | amber #c4832a
+   All class names prefixed with .ss- to avoid global CSS pollution.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Container ─────────────────────────────────────────────────────────────── */
+.ss-widget {
+  background:    #2d3142;
+  border-radius: 24px;
+  color:         #f5f0eb;
+  font-family:   'Inter', 'Plus Jakarta Sans', system-ui, sans-serif;
+  max-width:     480px;
+  margin:        0 auto;
+  padding:       28px 24px 32px;
+  box-shadow:    0 8px 48px rgba(0,0,0,0.38);
+  position:      relative;
+  overflow:      hidden;
+}
+
+/* Subtle warm texture overlay */
+.ss-widget::before {
+  content:          '';
+  position:         absolute;
+  inset:            0;
+  background:       radial-gradient(ellipse at 30% 0%, rgba(196,131,42,0.07) 0%, transparent 60%);
+  pointer-events:   none;
+  border-radius:    24px;
+}
+
+/* ── Sam icon (centered above questions) ────────────────────────────────────── */
+.ss-icon-center {
+  display:         flex;
+  justify-content: center;
+  margin-bottom:   20px;
+}
+.ss-icon-center img {
+  width:         64px;
+  height:        64px;
+  border-radius: 50%;
+  object-fit:    cover;
+  display:       block;
+}
+
+/* ── Progress dots ──────────────────────────────────────────────────────────── */
+.ss-progress {
+  display:         flex;
+  gap:             8px;
+  margin-bottom:   24px;
+}
+.ss-dot {
+  width:         8px;
+  height:        8px;
+  border-radius: 50%;
+  background:    rgba(255,255,255,0.15);
+  transition:    background 0.3s, transform 0.3s;
+}
+.ss-dot--active {
+  background:  #e8735a;
+  transform:   scale(1.3);
+}
+.ss-dot--done {
+  background: rgba(232,115,90,0.45);
+}
+
+/* ── Step body ──────────────────────────────────────────────────────────────── */
+.ss-body { min-height: 300px; }
+.ss-step { display: flex; flex-direction: column; gap: 0; }
+
+.ss-question {
+  font-size:     20px;
+  font-weight:   700;
+  line-height:   1.3;
+  margin:        0 0 6px;
+  letter-spacing: -0.01em;
+}
+.ss-sub {
+  font-size:    13px;
+  color:        #9da3b8;
+  margin:       0 0 20px;
+  line-height:  1.5;
+}
+
+/* ── Injury type grid ───────────────────────────────────────────────────────── */
+.ss-injury-grid {
+  display:               grid;
+  grid-template-columns: 1fr 1fr;
+  gap:                   10px;
+  margin-bottom:         24px;
+}
+.ss-card {
+  background:     #383d52;
+  border:         2px solid transparent;
+  border-radius:  16px;
+  padding:        16px 12px;
+  cursor:         pointer;
+  display:        flex;
+  flex-direction: column;
+  align-items:    flex-start;
+  gap:            4px;
+  text-align:     left;
+  transition:     border-color 0.2s, background 0.2s, transform 0.15s;
+  color:          #f5f0eb;
+}
+.ss-card:hover {
+  border-color: rgba(232,115,90,0.4);
+  transform:    translateY(-2px);
+}
+.ss-card--selected {
+  border-color: #e8735a;
+  background:   rgba(232,115,90,0.12);
+}
+.ss-card__emoji {
+  font-size:     22px;
+  line-height:   1;
+  margin-bottom: 4px;
+}
+.ss-card__label {
+  font-size:   14px;
+  font-weight: 700;
+}
+.ss-card__sub {
+  font-size: 11px;
+  color:     #9da3b8;
+}
+
+/* ── Surgery cards ──────────────────────────────────────────────────────────── */
+.ss-surgery-grid {
+  display:        flex;
+  flex-direction: column;
+  gap:            12px;
+  margin-bottom:  24px;
+}
+.ss-surgery-card {
+  display:        flex;
+  align-items:    center;
+  gap:            16px;
+  background:     #383d52;
+  border:         2px solid transparent;
+  border-radius:  16px;
+  padding:        18px 20px;
+  cursor:         pointer;
+  text-align:     left;
+  color:          #f5f0eb;
+  transition:     border-color 0.2s, background 0.2s, transform 0.15s;
+}
+.ss-surgery-card:hover { transform: translateY(-2px); }
+.ss-surgery-card--selected {
+  background: rgba(232,115,90,0.12);
+}
+.ss-surgery-card--yes.ss-surgery-card--selected {
+  border-color: #e8735a;
+}
+.ss-surgery-card--no.ss-surgery-card--selected {
+  border-color: #c4832a;
+}
+.ss-surgery-icon { font-size: 28px; flex-shrink: 0; }
+.ss-surgery-label { font-size: 15px; font-weight: 700; }
+.ss-surgery-sub   { font-size: 12px; color: #9da3b8; margin-top: 2px; }
+
+/* ── Lost wages slider ─────────────────────────────────────────────────────── */
+.ss-wages-display {
+  text-align:    center;
+  margin-bottom: 16px;
+}
+.ss-wages-amount {
+  font-size:   52px;
+  font-weight: 800;
+  color:       #e8735a;
+  line-height: 1;
+  letter-spacing: -0.03em;
+}
+.ss-wages-label {
+  font-size: 12px;
+  color:     #9da3b8;
+  margin-top: 4px;
+}
+
+.ss-slider-wrap { margin-bottom: 24px; }
+
+.ss-slider {
+  -webkit-appearance: none;
+  appearance:         none;
+  width:              100%;
+  height:             8px;
+  border-radius:      4px;
+  outline:            none;
+  cursor:             pointer;
+}
+.ss-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width:              26px;
+  height:             26px;
+  border-radius:      50%;
+  background:         #e8735a;
+  box-shadow:         0 0 12px rgba(232,115,90,0.5);
+  cursor:             pointer;
+  transition:         transform 0.15s;
+}
+.ss-slider:active::-webkit-slider-thumb { transform: scale(1.2); }
+.ss-slider::-moz-range-thumb {
+  width:        26px;
+  height:       26px;
+  border:       none;
+  border-radius: 50%;
+  background:   #e8735a;
+  cursor:       pointer;
+}
+
+.ss-slider-ticks {
+  display:         flex;
+  justify-content: space-between;
+  margin-top:      8px;
+  font-size:       11px;
+  color:           #9da3b8;
+  padding:         0 2px;
+}
+
+/* ── Navigation ─────────────────────────────────────────────────────────────── */
+.ss-nav {
+  display:         flex;
+  justify-content: space-between;
+  align-items:     center;
+  margin-top:      8px;
+}
+.ss-btn-back {
+  background:  transparent;
+  border:      none;
+  color:       #9da3b8;
+  font-size:   14px;
+  cursor:      pointer;
+  padding:     8px 0;
+  transition:  color 0.2s;
+}
+.ss-btn-back:hover { color: #f5f0eb; }
+
+.ss-btn-next {
+  background:    #e8735a;
+  color:         #fff;
+  border:        none;
+  border-radius: 12px;
+  padding:       12px 24px;
+  font-size:     15px;
+  font-weight:   700;
+  cursor:        pointer;
+  transition:    background 0.2s, transform 0.15s, opacity 0.2s;
+  letter-spacing: 0.01em;
+}
+.ss-btn-next:hover:not(:disabled) {
+  background: #d96348;
+  transform:  translateY(-1px);
+}
+.ss-btn-next:disabled {
+  opacity: 0.35;
+  cursor:  not-allowed;
+}
+
+/* ── Verification gate ─────────────────────────────────────────────────────── */
+.ss-gate-step { gap: 16px; }
+
+.ss-gate-preview {
+  position:      relative;
+  border-radius: 16px;
+  overflow:      hidden;
+  background:    #383d52;
+  padding:       20px;
+  text-align:    center;
+}
+.ss-gate-preview__blur {
+  filter: blur(8px);
+  pointer-events: none;
+  user-select: none;
+}
+.ss-gate-preview__overlay {
+  position:    absolute;
+  inset:       0;
+  display:     flex;
+  align-items: center;
+  justify-content: center;
+  gap:         8px;
+  background:  rgba(45,49,66,0.72);
+  color:       #f5f0eb;
+  font-size:   14px;
+  font-weight: 600;
+  backdrop-filter: blur(2px);
+}
+.ss-gate-lock-icon { font-size: 18px; }
+
+.ss-lock-card {
+  background:    #383d52;
+  border-radius: 20px;
+  padding:       24px 20px;
+  display:       flex;
+  flex-direction: column;
+  align-items:   center;
+  gap:           12px;
+  text-align:    center;
+}
+.ss-sam-wrap {
+  width:         72px;
+  height:        72px;
+  border-radius: 50%;
+  background:    rgba(196,131,42,0.12);
+  display:       flex;
+  align-items:   center;
+  justify-content: center;
+  flex-shrink:   0;
+}
+.ss-lock-headline {
+  font-size:   20px;
+  font-weight: 700;
+  margin:      0;
+  color:       #f5f0eb;
+}
+.ss-lock-sub {
+  font-size:  14px;
+  color:      #9da3b8;
+  margin:     0;
+  max-width:  300px;
+}
+.ss-lock-phone { color: #f5f0eb; font-weight: 600; }
+
+/* ── Form fields ───────────────────────────────────────────────────────────── */
+.ss-fields {
+  width:          100%;
+  display:        flex;
+  flex-direction: column;
+  gap:            12px;
+  text-align:     left;
+}
+.ss-field { display: flex; flex-direction: column; gap: 6px; }
+.ss-field-label { font-size: 12px; font-weight: 600; color: #9da3b8; text-transform: uppercase; letter-spacing: 0.05em; }
+.ss-field-input {
+  background:    rgba(255,255,255,0.06);
+  border:        1.5px solid rgba(255,255,255,0.12);
+  border-radius: 10px;
+  color:         #f5f0eb;
+  font-size:     15px;
+  padding:       11px 14px;
+  outline:       none;
+  transition:    border-color 0.2s;
+  width:         100%;
+  box-sizing:    border-box;
+}
+.ss-field-input::placeholder { color: rgba(245,240,235,0.3); }
+.ss-field-input:focus { border-color: #e8735a; }
+
+.ss-select-wrap { position: relative; }
+.ss-field-select {
+  appearance:    none;
+  -webkit-appearance: none;
+  background:    rgba(255,255,255,0.06);
+  border:        1.5px solid rgba(255,255,255,0.12);
+  border-radius: 10px;
+  color:         #f5f0eb;
+  font-size:     15px;
+  padding:       11px 36px 11px 14px;
+  width:         100%;
+  outline:       none;
+  transition:    border-color 0.2s;
+  cursor:        pointer;
+}
+.ss-field-select:focus { border-color: #e8735a; }
+.ss-field-select option { background: #2d3142; color: #f5f0eb; }
+.ss-select-arrow {
+  position:   absolute;
+  right:      14px;
+  top:        50%;
+  transform:  translateY(-50%);
+  pointer-events: none;
+  color:      #9da3b8;
+}
+
+/* ── CTA button (shared) ────────────────────────────────────────────────────── */
+.ss-bridge-cta {
+  display:       block;
+  width:         100%;
+  background:    #e8735a;
+  color:         #fff;
+  border:        none;
+  border-radius: 14px;
+  padding:       15px 20px;
+  font-size:     16px;
+  font-weight:   700;
+  text-align:    center;
+  text-decoration: none;
+  cursor:        pointer;
+  transition:    background 0.2s, transform 0.15s;
+  letter-spacing: 0.01em;
+}
+.ss-bridge-cta:hover:not(:disabled) {
+  background: #d96348;
+  transform:  translateY(-2px);
+}
+.ss-bridge-cta:disabled { opacity: 0.4; cursor: not-allowed; }
+.ss-bridge-cta--pulse {
+  animation: ssPulseOnce 1.6s ease-out 0.4s;
+}
+@keyframes ssPulseOnce {
+  0%   { box-shadow: 0 0 0 0 rgba(232,115,90,0.55); }
+  50%  { box-shadow: 0 0 0 14px rgba(232,115,90,0); }
+  100% { box-shadow: 0 0 0 0 rgba(232,115,90,0); }
+}
+
+/* ── Error / fine print ─────────────────────────────────────────────────────── */
+.ss-verify-error {
+  color:      #e8735a;
+  font-size:  13px;
+  margin:     0;
+  text-align: center;
+}
+.ss-gate-fine {
+  color:      #9da3b8;
+  font-size:  11px;
+  text-align: center;
+  margin:     0;
+}
+.ss-resend {
+  background:  transparent;
+  border:      none;
+  color:       #9da3b8;
+  font-size:   13px;
+  cursor:      pointer;
+  padding:     8px 0;
+  transition:  color 0.2s;
+  display:     block;
+  width:       100%;
+  text-align:  center;
+  margin-top:  8px;
+}
+.ss-resend:hover:not(:disabled) { color: #f5f0eb; }
+.ss-resend:disabled { opacity: 0.4; cursor: default; }
+.ss-resend-inline {
+  background:  transparent;
+  border:      none;
+  color:       #e8735a;
+  cursor:      pointer;
+  font-size:   inherit;
+  padding:     0;
+  text-decoration: underline;
+}
+
+/* ── OTP input ──────────────────────────────────────────────────────────────── */
+.ss-code-inputs {
+  display:         flex;
+  gap:             10px;
+  justify-content: center;
+  margin-top:      4px;
+}
+.ss-code-digit {
+  width:         52px;
+  height:        60px;
+  border:        2px solid rgba(255,255,255,0.12);
+  border-radius: 12px;
+  background:    rgba(255,255,255,0.06);
+  color:         #f5f0eb;
+  font-size:     26px;
+  font-weight:   700;
+  text-align:    center;
+  outline:       none;
+  transition:    border-color 0.2s, background 0.2s;
+  caret-color:   #e8735a;
+}
+.ss-code-digit--filled  { border-color: rgba(232,115,90,0.55); background: rgba(232,115,90,0.08); }
+.ss-code-digit:focus    { border-color: #e8735a; }
+
+/* ── Result screen ──────────────────────────────────────────────────────────── */
+.ss-result {
+  display:        flex;
+  flex-direction: column;
+  align-items:    center;
+  gap:            16px;
+  padding-top:    8px;
+}
+
+.ss-gauge-outer {
+  position:        relative;
+  display:         flex;
+  justify-content: center;
+  width:           100%;
+}
+.ss-gauge-wrap  { position: relative; z-index: 1; }
+.ss-confetti    { position: absolute; top: 50%; left: 50%; z-index: 2; pointer-events: none; }
+
+.ss-range-glow-wrap {
+  position:   relative;
+  text-align: center;
+  width:      100%;
+}
+.ss-range-glow {
+  position:     absolute;
+  top:          50%;
+  left:         50%;
+  transform:    translate(-50%, -50%);
+  width:        260px;
+  height:       80px;
+  background:   radial-gradient(ellipse, rgba(232,115,90,0.22) 0%, transparent 70%);
+  pointer-events: none;
+}
+.ss-result-label {
+  font-size:  13px;
+  color:      #9da3b8;
+  margin-bottom: 4px;
+}
+.ss-range-main {
+  font-size:      52px;
+  font-weight:    800;
+  color:          #f5f0eb;
+  line-height:    1;
+  letter-spacing: -0.03em;
+}
+.ss-summary-text {
+  font-size:   13px;
+  color:       #9da3b8;
+  text-align:  center;
+  line-height: 1.6;
+  margin:      0;
+  max-width:   360px;
+}
+
+/* ── Divider ─────────────────────────────────────────────────────────────────── */
+.ss-divider {
+  width:      100%;
+  height:     1px;
+  background: rgba(255,255,255,0.08);
+  margin:     4px 0;
+}
+
+/* ── Bridge section ─────────────────────────────────────────────────────────── */
+.ss-bridge {
+  width:      100%;
+  text-align: center;
+}
+.ss-bridge-headline {
+  font-size:   20px;
+  font-weight: 700;
+  margin:      0 0 8px;
+  color:       #f5f0eb;
+}
+.ss-bridge-sub {
+  font-size:    13px;
+  color:        #9da3b8;
+  margin:       0 0 18px;
+  line-height:  1.6;
+}
+.ss-bridge-urgency {
+  font-size:  12px;
+  color:      #9da3b8;
+  margin-top: 12px;
+  text-align: center;
+}
+
+/* ── Restart + disclaimer ───────────────────────────────────────────────────── */
+.ss-restart {
+  background:  transparent;
+  border:      none;
+  color:       #9da3b8;
+  font-size:   13px;
+  cursor:      pointer;
+  padding:     6px 0;
+  transition:  color 0.2s;
+}
+.ss-restart:hover { color: #f5f0eb; }
+
+.ss-disclaimer {
+  font-size:   10px;
+  color:       rgba(157,163,184,0.7);
+  text-align:  center;
+  line-height: 1.6;
+  margin:      0;
+  max-width:   400px;
+  padding:     0 4px;
+}
+
+/* ── Result range size — match spec (60–80px font) ─────────────────────────── */
+@media (min-width: 380px) {
+  .ss-range-main { font-size: 60px; }
+}
+@media (min-width: 420px) {
+  .ss-range-main { font-size: 68px; }
+}
