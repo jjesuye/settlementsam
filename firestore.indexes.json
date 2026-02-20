@@ -1,0 +1,44 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "verification_codes",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "phone",     "order": "ASCENDING" },
+        { "fieldPath": "timestamp", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "verification_codes",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "phone", "order": "ASCENDING" },
+        { "fieldPath": "used",  "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "login_attempts",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "identifier",   "order": "ASCENDING" },
+        { "fieldPath": "attempted_at", "order": "ASCENDING" },
+        { "fieldPath": "success",      "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "leads",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "timestamp", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "clients",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "created_at", "order": "DESCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}
