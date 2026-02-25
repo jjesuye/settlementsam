@@ -1246,6 +1246,35 @@ button { font-family: inherit; }
 .sl-roi-big { font-size: 28px !important; letter-spacing: -0.5px; }
 .sl-roi-disclaimer { font-size: 11px; color: var(--ss-muted); margin: 16px 0 0; opacity: 0.7; text-align: center; }
 
+/* ── Pricing gate ─────────────────────────────────────────────────────────── */
+.sl-pricing-gate { background: var(--ss-bg); }
+.sl-gate-card {
+  max-width: 680px; margin: 0 auto;
+  background: var(--ss-card);
+  border: 1px solid var(--ss-border);
+  border-radius: var(--radius-lg);
+  padding: 48px 40px;
+  box-shadow: 0 4px 24px rgba(44,62,53,0.10);
+  text-align: center;
+}
+.sl-gate-lock { font-size: 40px; margin-bottom: 16px; }
+.sl-gate-headline { font-size: clamp(22px,3vw,30px); font-weight: 800; margin: 0 0 10px; color: var(--ss-text); }
+.sl-gate-sub { font-size: 15px; color: var(--ss-muted); margin: 0 0 32px; line-height: 1.6; }
+.sl-gate-form { text-align: left; }
+.sl-gate-submit { margin-top: 8px; }
+.sl-select-wrap { position: relative; }
+.sl-select-wrap .sl-select { appearance: none; padding-right: 32px; }
+.sl-select-arrow { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); pointer-events: none; color: var(--ss-muted); font-size: 12px; }
+.sl-input--error { border-color: #C0392B !important; }
+.sl-field-error { font-size: 12px; color: #C0392B; margin: 4px 0 0; }
+.sl-form-error { font-size: 13px; color: #C0392B; background: rgba(192,57,43,0.08); border: 1px solid rgba(192,57,43,0.2); border-radius: 8px; padding: 10px 14px; margin-top: 12px; }
+.sl-pricing-confirmation {
+  display: flex; align-items: center; gap: 10px;
+  background: rgba(74,124,89,0.1); border: 1px solid rgba(74,124,89,0.25);
+  border-radius: 10px; padding: 14px 20px; margin-bottom: 32px; font-size: 15px; color: var(--ss-text);
+}
+.sl-pricing-confirm-icon { color: var(--ss-green); font-size: 18px; font-weight: 700; }
+
 /* ── Pricing ─────────────────────────────────────────────────────────────── */
 .sl-pricing { background: var(--ss-bg); }
 .sl-pricing-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 24px; margin-bottom: 24px; }
