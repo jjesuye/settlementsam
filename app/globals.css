@@ -833,9 +833,41 @@ button { font-family: inherit; }
 }
 .sa-btn:hover      { border-color: var(--ss-coral); color: var(--ss-coral); }
 .sa-btn--primary   { border-color: var(--ss-coral); color: var(--ss-coral); }
+.sa-btn--ghost     { border-color: var(--ss-border); color: var(--ss-muted); }
 .sa-btn--danger    { border-color: #C0392B; color: #C0392B; }
 .sa-btn--success   { border-color: var(--ss-gold); color: var(--ss-gold); }
+.sa-btn--xs        { font-size: 10px; padding: 3px 8px; }
+.sa-btn:disabled   { opacity: 0.5; cursor: not-allowed; }
 .sa-actions        { display: flex; gap: 6px; flex-wrap: wrap; }
+
+/* Badges */
+.sa-badge          { display: inline-block; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 99px; }
+.sa-badge--green   { background: #EEF6EE; color: #4A7C59; border: 1px solid #4A7C59; }
+.sa-badge--amber   { background: #FFF8EC; color: #B87D2A; border: 1px solid #E8A838; }
+
+/* Table extras */
+.sa-row--muted td  { opacity: 0.55; }
+.sa-notes-preview  { font-size: 12px; color: var(--ss-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; max-width: 140px; }
+.sa-empty          { padding: 32px; text-align: center; color: var(--ss-muted); font-size: 14px; }
+.sa-table-scroll   { overflow-x: auto; }
+
+/* Modal */
+.sa-modal-backdrop {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.4);
+  display: flex; align-items: center; justify-content: center; z-index: 1000;
+}
+.sa-modal {
+  background: white; border-radius: 16px; padding: 28px 24px;
+  width: min(480px, 90vw); box-shadow: 0 16px 48px rgba(0,0,0,0.2);
+}
+.sa-modal-title   { font-size: 18px; font-weight: 700; color: var(--ss-text); margin: 0 0 16px; }
+.sa-modal-textarea {
+  width: 100%; border: 1px solid var(--ss-border); border-radius: 10px;
+  padding: 12px; font-size: 14px; font-family: inherit; resize: vertical;
+  outline: none; color: var(--ss-text);
+}
+.sa-modal-textarea:focus { border-color: var(--ss-gold); }
+.sa-modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 16px; }
 
 /* Login */
 .sa-login-page {

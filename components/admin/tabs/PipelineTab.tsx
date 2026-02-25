@@ -3,6 +3,7 @@
  * components/admin/tabs/PipelineTab.tsx
  * Tab 1 — Pipeline overview.
  *   Top: stat cards (total, HOT, WARM, COLD, delivered, 7-day)
+ *   Middle: Upcoming Calls (booked attorney demos)
  *   Below: filterable / searchable lead table with row actions
  */
 
@@ -12,6 +13,12 @@ import { adminFetch } from '@/lib/admin/auth';
 import { formatCurrency } from '@/lib/estimator/logic';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
+
+interface Booking {
+  id: string; name: string; firm: string; email: string; phone: string;
+  state: string; case_volume: string; date: string; time: string;
+  status: 'confirmed' | 'cancelled' | 'completed';
+}
 
 interface Stats {
   total: number; verified: number; hot: number; warm: number; cold: number;
@@ -61,6 +68,99 @@ function StatCard({ label, value, sub, mod }: { label: string; value: string | n
       <div className="sa-stat-value">{value}</div>
       {sub && <div className="sa-stat-sub">{sub}</div>}
     </motion.div>
+  );
+}
+
+// ── UpcomingCalls ─────────────────────────────────────────────────────────────
+
+function UpcomingCalls() {
+  const [bookings, setBookings] = useState<Booking[]>([]);
+  const [loading,  setLoading]  = useState(true);
+
+  async function fetchBookings() {
+    setLoading(true);
+    const res  = await adminFetch('/api/bookings');
+    const data = await res.json();
+    if (res.ok) {
+      // Show only upcoming confirmed bookings (today or future)
+      const today = new Date().toISOString().split('T')[0];
+      const upcoming = (data.bookings as Booking[]).filter(
+        b => b.status === 'confirmed' && b.date >= today,
+      );
+      setBookings(upcoming);
+    }
+    setLoading(false);
+  }
+
+  useEffect(() => { fetchBookings(); }, []);
+
+  async function updateStatus(id: string, status: Booking['status']) {
+    await adminFetch('/api/bookings', {
+      method:  'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ id, status }),
+    });
+    setBookings(prev => prev.filter(b => b.id !== id));
+  }
+
+  return (
+    <div className="sa-table-wrap" style={{ marginBottom: 24 }}>
+      <div className="sa-table-header">
+        <span className="sa-table-title">📅 Upcoming Demo Calls ({bookings.length})</span>
+        <button className="sa-btn sa-btn--ghost" onClick={fetchBookings}>↺ Refresh</button>
+      </div>
+      {loading ? (
+        <div className="sa-empty">Loading…</div>
+      ) : bookings.length === 0 ? (
+        <div className="sa-empty">No upcoming calls.</div>
+      ) : (
+        <div style={{ overflowX: 'auto' }}>
+          <table className="sa-table">
+            <thead>
+              <tr>
+                <th>Name / Firm</th>
+                <th>Date</th>
+                <th>Time</th>
+                <th>State</th>
+                <th>Volume</th>
+                <th>Email</th>
+                <th>Phone</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {bookings.map(b => (
+                <tr key={b.id}>
+                  <td>
+                    <div style={{ fontWeight: 600 }}>{b.name}</div>
+                    <div style={{ fontSize: 12, color: 'var(--ss-muted)' }}>{b.firm}</div>
+                  </td>
+                  <td style={{ whiteSpace: 'nowrap' }}>{b.date}</td>
+                  <td style={{ whiteSpace: 'nowrap' }}>{b.time} EST</td>
+                  <td>{b.state}</td>
+                  <td>{b.case_volume}/mo</td>
+                  <td style={{ fontSize: 12 }}>{b.email}</td>
+                  <td style={{ whiteSpace: 'nowrap' }}>{b.phone}</td>
+                  <td>
+                    <div className="sa-actions">
+                      <button
+                        className="sa-btn sa-btn--primary sa-btn--xs"
+                        onClick={() => updateStatus(b.id, 'completed')}
+                      >✓ Done</button>
+                      <button
+                        className="sa-btn sa-btn--xs"
+                        style={{ color: '#f87171' }}
+                        onClick={() => updateStatus(b.id, 'cancelled')}
+                      >Cancel</button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -122,6 +222,9 @@ export function PipelineTab({ onViewLead }: { onViewLead: (id: string) => void }
           <StatCard label="Avg Score"     value={`${stats.avgScore}/150`} sub="Verified leads" />
         </div>
       )}
+
+      {/* ── Upcoming calls ───────────────────────────────────────────────── */}
+      <UpcomingCalls />
 
       {/* ── Lead table ───────────────────────────────────────────────────── */}
       <div className="sa-table-wrap">

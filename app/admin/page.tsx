@@ -12,20 +12,22 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { isLoggedIn, clearToken, startActivityWatcher } from '@/lib/admin/auth';
-import { PipelineTab }         from '@/components/admin/tabs/PipelineTab';
-import { LeadProfileTab }      from '@/components/admin/tabs/LeadProfileTab';
-import { SmsControlsTab }      from '@/components/admin/tabs/SmsControlsTab';
-import { AdPerformanceTab }    from '@/components/admin/tabs/AdPerformanceTab';
-import { ClientManagementTab } from '@/components/admin/tabs/ClientManagementTab';
+import { PipelineTab }            from '@/components/admin/tabs/PipelineTab';
+import { LeadProfileTab }         from '@/components/admin/tabs/LeadProfileTab';
+import { SmsControlsTab }         from '@/components/admin/tabs/SmsControlsTab';
+import { AdPerformanceTab }       from '@/components/admin/tabs/AdPerformanceTab';
+import { ClientManagementTab }    from '@/components/admin/tabs/ClientManagementTab';
+import { AttorneyInquiriesTab }   from '@/components/admin/tabs/AttorneyInquiriesTab';
 
-type Tab = 'pipeline' | 'leads' | 'sms' | 'ads' | 'clients';
+type Tab = 'pipeline' | 'leads' | 'sms' | 'ads' | 'clients' | 'attorneys';
 
 const NAV_ITEMS: { id: Tab; icon: string; label: string }[] = [
-  { id: 'pipeline', icon: '📊', label: 'Pipeline'         },
-  { id: 'leads',    icon: '👤', label: 'Lead Profile'     },
-  { id: 'sms',      icon: '📱', label: 'SMS Controls'     },
-  { id: 'ads',      icon: '📈', label: 'Ad Performance'   },
-  { id: 'clients',  icon: '🏢', label: 'Clients'          },
+  { id: 'pipeline',  icon: '📊', label: 'Pipeline'          },
+  { id: 'leads',     icon: '👤', label: 'Lead Profile'      },
+  { id: 'sms',       icon: '📱', label: 'SMS Controls'      },
+  { id: 'ads',       icon: '📈', label: 'Ad Performance'    },
+  { id: 'clients',   icon: '🏢', label: 'Clients'           },
+  { id: 'attorneys', icon: '⚖️', label: 'Attorney Inquiries' },
 ];
 
 export default function AdminPage() {
@@ -116,11 +118,12 @@ export default function AdminPage() {
             exit={{ opacity: 0, y: -8 }}
             transition={{ duration: 0.18 }}
           >
-            {tab === 'pipeline' && <PipelineTab onViewLead={viewLead} />}
-            {tab === 'leads'    && <LeadProfileTab leadId={leadId} onBack={() => setTab('pipeline')} />}
-            {tab === 'sms'      && <SmsControlsTab />}
-            {tab === 'ads'      && <AdPerformanceTab />}
-            {tab === 'clients'  && <ClientManagementTab />}
+            {tab === 'pipeline'  && <PipelineTab onViewLead={viewLead} />}
+            {tab === 'leads'     && <LeadProfileTab leadId={leadId} onBack={() => setTab('pipeline')} />}
+            {tab === 'sms'       && <SmsControlsTab />}
+            {tab === 'ads'       && <AdPerformanceTab />}
+            {tab === 'clients'   && <ClientManagementTab />}
+            {tab === 'attorneys' && <AttorneyInquiriesTab />}
           </motion.div>
         </AnimatePresence>
       </main>
