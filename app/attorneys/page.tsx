@@ -452,7 +452,8 @@ export default function AttorneysPage() {
       <nav className="sl-nav">
         <div className="sl-nav-inner">
           <Link href="/" className="sl-logo">
-            <img src="/images/sam-icons/sam-logo.png" alt="Settlement Sam" />
+            <img src="/images/sam-icons/sam-icon.png" className="sl-logo-icon" alt="Settlement Sam" />
+            <span className="sl-logo-text">Settlement Sam</span>
           </Link>
           <div className="sl-nav-links">
             <a href="#features">Features</a>
@@ -478,7 +479,7 @@ export default function AttorneysPage() {
       </nav>
 
       {/* ── HERO ────────────────────────────────────────────────────────────── */}
-      <section className="sl-hero">
+      <section className="sl-hero sl-hero--attorneys">
         <div className="container">
           <div className="sl-hero-grid">
             <motion.div
@@ -511,7 +512,7 @@ export default function AttorneysPage() {
               transition={{ duration: 0.6, ease: 'easeOut', delay: 0.2 }}
             >
               <div className="sl-sam-avatar-wrap">
-                <img src="/images/sam-icons/sam-logo.png" className="sl-sam-avatar" alt="Settlement Sam" />
+                <img src="/images/sam-icons/sam-icon.png" className="sl-sam-avatar" alt="Settlement Sam" />
               </div>
               <motion.div
                 className="sl-speech-bubble"

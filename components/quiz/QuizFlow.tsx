@@ -529,15 +529,11 @@ export function QuizFlow() {
   if (screen === 'quiz') {
     return (
       <div className="sq-page">
-        <div className="sq-topbar">
-          <div className="sq-brand">
-            <img src="/images/sam-icons/sam-logo.png" height={24} alt="" aria-hidden="true" className="sq-brand-icon" style={{ borderRadius: '50%', objectFit: 'contain' }} />
+        <div className="sq-header">
+          <img src="/images/sam-icons/sam-icon.png" className="sq-header-icon" alt="" aria-hidden="true" />
+          <div className="sq-progress-bar">
+            <div className="sq-progress-fill" style={{ width: `${progressPct}%` }} />
           </div>
-          <span className="sq-step-counter">{stepPos + 1} / {totalQuestions}</span>
-        </div>
-
-        <div className="sq-progress-bar">
-          <div className="sq-progress-fill" style={{ width: `${progressPct}%` }} />
         </div>
 
         <AnimatePresence mode="wait" custom={direction}>
@@ -551,6 +547,7 @@ export function QuizFlow() {
             exit="exit"
             transition={springTransition}
           >
+            <div className="sq-card-step">{stepPos + 1} / {totalQuestions}</div>
             <h2 className="sq-headline">{currentQ.headline}</h2>
             {currentQ.sub && <p className="sq-sub">{currentQ.sub}</p>}
 
@@ -574,14 +571,11 @@ export function QuizFlow() {
         {/* Invisible reCAPTCHA anchor */}
         <div id="recaptcha-container" />
 
-        <div className="sq-topbar">
-          <div className="sq-brand">
-            <img src="/images/sam-icons/sam-logo.png" height={24} alt="" aria-hidden="true" className="sq-brand-icon" style={{ borderRadius: '50%', objectFit: 'contain' }} />
+        <div className="sq-header">
+          <img src="/images/sam-icons/sam-icon.png" className="sq-header-icon" alt="" aria-hidden="true" />
+          <div className="sq-progress-bar">
+            <div className="sq-progress-fill" style={{ width: '92%' }} />
           </div>
-          <span className="sq-step-counter">Almost done!</span>
-        </div>
-        <div className="sq-progress-bar">
-          <div className="sq-progress-fill" style={{ width: '92%' }} />
         </div>
 
         <motion.div
@@ -591,12 +585,6 @@ export function QuizFlow() {
           transition={{ duration: 0.3 }}
         >
           <div style={{ textAlign: 'center' }}>
-            <img
-              src="/images/sam-icons/sam-logo.png"
-              width={64} height={64}
-              alt="Settlement Sam"
-              style={{ borderRadius: '50%', objectFit: 'contain', display: 'block', margin: '0 auto 12px' }}
-            />
             <h2 className="sq-headline" style={{ marginBottom: 4 }}>One last thing…</h2>
             <p className="sq-sub" style={{ marginBottom: 0 }}>
               Where should we send your results? We'll text you a quick verification code.
@@ -697,14 +685,11 @@ export function QuizFlow() {
     const canVerify = code.replace(/\s/g, '').length === CODE_LENGTH;
     return (
       <div className="sq-page">
-        <div className="sq-topbar">
-          <div className="sq-brand">
-            <img src="/images/sam-icons/sam-logo.png" height={24} alt="" aria-hidden="true" className="sq-brand-icon" style={{ borderRadius: '50%', objectFit: 'contain' }} />
+        <div className="sq-header">
+          <img src="/images/sam-icons/sam-icon.png" className="sq-header-icon" alt="" aria-hidden="true" />
+          <div className="sq-progress-bar">
+            <div className="sq-progress-fill" style={{ width: '97%' }} />
           </div>
-          <span className="sq-step-counter">Verify</span>
-        </div>
-        <div className="sq-progress-bar">
-          <div className="sq-progress-fill" style={{ width: '97%' }} />
         </div>
 
         <motion.div
@@ -714,12 +699,6 @@ export function QuizFlow() {
           transition={{ duration: 0.3 }}
         >
           <div className="sq-verify-screen">
-            <img
-              src="/images/sam-icons/sam-logo.png"
-              width={72} height={72}
-              alt="Settlement Sam"
-              style={{ borderRadius: '50%', objectFit: 'contain', display: 'block', margin: '0 auto' }}
-            />
 
             <div>
               <h2 className="sq-headline" style={{ marginBottom: 6 }}>Check your texts!</h2>

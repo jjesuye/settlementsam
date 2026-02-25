@@ -74,7 +74,8 @@ export default function LandingPage() {
       <nav className="sl-nav">
         <div className="sl-nav-inner">
           <span className="sl-logo">
-            <img src="/images/sam-icons/sam-logo.png" alt="Settlement Sam" />
+            <img src="/images/sam-icons/sam-icon.png" className="sl-logo-icon" alt="Settlement Sam" />
+            <span className="sl-logo-text">Settlement Sam</span>
           </span>
           <div className="sl-nav-links">
             <a href="#how-it-works">How It Works</a>
