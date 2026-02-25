@@ -24,6 +24,7 @@ import jwt from 'jsonwebtoken';
 import { adminDb, adminAuth } from '@/lib/firebase/admin';
 import { calculateScore, scoreTier, calculateQuizEstimate } from '@/lib/quiz/scoring';
 import type { QuizAnswers } from '@/lib/quiz/types';
+import { validateEmailServer } from '@/lib/validate-email-server';
 
 export const dynamic = 'force-dynamic';
 
@@ -70,6 +71,17 @@ export async function POST(req: NextRequest) {
       { error: 'invalid_input', message: 'Firebase ID token is required.' },
       { status: 400 },
     );
+  }
+
+  // ── Email validation (server-side MX check when email is provided) ────────────
+  if (email && typeof email === 'string' && email.trim()) {
+    const emailError = await validateEmailServer(email);
+    if (emailError) {
+      return NextResponse.json(
+        { error: 'invalid_email', message: emailError },
+        { status: 400 },
+      );
+    }
   }
 
   // ── Verify Firebase ID token server-side ─────────────────────────────────────

@@ -92,3 +92,33 @@ export interface FsAdmin {
   password_hash: string;
   created_at: number;        // Unix ms
 }
+
+export interface FsAttorneyInquiry {
+  id?: string;
+  name: string;
+  firm: string;
+  email: string;
+  phone: string;
+  state: string;
+  case_volume: string;       // '1-5' | '5-15' | '15-30' | '30+'
+  timestamp: number;         // Unix ms
+  source: string;            // 'attorneys_page'
+  contacted: boolean;
+  pricing_viewed: boolean;
+  notes: string;
+}
+
+export interface FsBooking {
+  id?: string;
+  name: string;
+  firm: string;
+  email: string;
+  phone: string;
+  state: string;
+  case_volume: string;
+  date: string;              // ISO date string YYYY-MM-DD
+  time: string;              // '9:00 AM' etc.
+  status: string;            // 'confirmed' | 'cancelled' | 'completed'
+  created_at: number;        // Unix ms
+  reminder_sent: boolean;
+}

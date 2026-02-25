@@ -33,6 +33,7 @@ import {
   verifyCode,
   mapFirebaseAuthError,
 } from '@/lib/firebase/phone-auth';
+import { validateEmailFormat } from '@/lib/validate-email';
 
 // ── Phone formatter ────────────────────────────────────────────────────────────
 
@@ -162,6 +163,7 @@ export function QuizFlow() {
   const [lastName,    setLastName]   = useState('');
   const [phone,       setPhone]      = useState('');
   const [email,       setEmail]      = useState('');
+  const [emailError,  setEmailError] = useState('');
   const [formError,   setFormError]  = useState('');
 
   // Verify
@@ -223,7 +225,7 @@ export function QuizFlow() {
     setFirstName(''); setLastName(''); setPhone('');
     setEmail(''); setFormError('');
     setCode(''); setVerifyError(''); setCooldown(0);
-    setResendCount(0); setCodeAttempts(0);
+    setResendCount(0); setCodeAttempts(0); setEmailError('');
   }, []);
 
   /** Parse string option value to typed value */
@@ -276,10 +278,11 @@ export function QuizFlow() {
     if (!isResend) {
       // Validate contact form fields
       const cleanPhone = phone.replace(/\D/g, '');
-      if (!firstName.trim())                        return setFormError('Please enter your first name.');
-      if (!lastName.trim())                         return setFormError('Please enter your last name.');
-      if (cleanPhone.length !== 10)                 return setFormError('Please enter a valid 10-digit phone number.');
-      if (!email.trim() || !email.includes('@'))    return setFormError('Please enter a valid email address.');
+      if (!firstName.trim())            return setFormError('Please enter your first name.');
+      if (!lastName.trim())             return setFormError('Please enter your last name.');
+      if (cleanPhone.length !== 10)     return setFormError('Please enter a valid 10-digit phone number.');
+      const emailErr = validateEmailFormat(email);
+      if (emailErr)                     return setFormError(emailErr);
     }
 
     setLoading(true);
@@ -638,13 +641,22 @@ export function QuizFlow() {
               <label className="sq-field-label" htmlFor="sq-email">Email Address</label>
               <input
                 id="sq-email"
-                className="sq-text-input"
+                className={`sq-text-input${emailError ? ' sq-input--error' : ''}`}
                 type="email"
                 placeholder="sam@example.com"
                 value={email}
-                onChange={e => setEmail(e.target.value)}
+                onChange={e => { setEmail(e.target.value); if (emailError) setEmailError(''); }}
+                onBlur={() => {
+                  if (email) {
+                    const err = validateEmailFormat(email);
+                    setEmailError(err ?? '');
+                  }
+                }}
                 autoComplete="email"
               />
+              {emailError && (
+                <p className="sq-field-error" role="alert">{emailError}</p>
+              )}
             </div>
 
             {formError && <p className="sq-form-error" role="alert">{formError}</p>}
