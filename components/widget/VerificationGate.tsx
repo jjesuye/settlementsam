@@ -14,9 +14,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { formatCurrency } from '@/lib/estimator/logic';
 import type { EstimateRange, EstimatorInputs } from '@/lib/estimator/types';
 import {
-  sendVerificationCode,
-  verifyCode,
-  mapFirebaseAuthError,
+  sendSMSCode,
+  verifySMSCode,
 } from '@/lib/firebase/phone-auth';
 
 // ── Phone formatter ────────────────────────────────────────────────────────────
@@ -146,20 +145,20 @@ export function VerificationGate({
   const handleSendCode = async (isResend = false) => {
     setError('');
     if (isResend && resendCount >= MAX_RESENDS) {
-      setError('Too many attempts. Please try again later.');
+      setError('Too many attempts. Please refresh the page and try again.');
       return;
     }
     setLoading(true);
-    try {
-      await sendVerificationCode(phone);
-      setSubStep('code');
-      setCooldown(COOLDOWN_S);
-      if (isResend) setResendCount(r => r + 1);
-    } catch (err: unknown) {
-      setError(mapFirebaseAuthError(err));
-    } finally {
-      setLoading(false);
+    const result = await sendSMSCode(phone);
+    setLoading(false);
+
+    if (!result.success) {
+      setError(result.error ?? 'Failed to send code.');
+      return;
     }
+    setSubStep('code');
+    setCooldown(COOLDOWN_S);
+    if (isResend) setResendCount(r => r + 1);
   };
 
   // ── Verify OTP and save lead ───────────────────────────────────────────────
@@ -171,12 +170,31 @@ export function VerificationGate({
     }
     setError('');
     setLoading(true);
-    try {
-      const { idToken } = await verifyCode(code);
 
+    const smsResult = await verifySMSCode(code);
+
+    if (!smsResult.success) {
+      const msg = smsResult.error ?? 'Verification failed. Please try again.';
+      if (msg.includes('incorrect') || msg.includes("didn't match")) {
+        const newAttempts = codeAttempts + 1;
+        setCodeAttempts(newAttempts);
+        const left = MAX_CODE_ATTEMPTS - newAttempts;
+        setError(
+          left > 0
+            ? `${msg} ${left} attempt${left !== 1 ? 's' : ''} remaining.`
+            : 'No attempts left. Please request a new code.',
+        );
+      } else {
+        setError(msg);
+      }
+      setLoading(false);
+      return;
+    }
+
+    try {
       // Save lead + get JWT from our server
       const body: Record<string, unknown> = {
-        idToken,
+        idToken:      smsResult.idToken,
         name:         name.trim(),
         injuryType:   inputs.injuryType,
         surgery:      inputs.hasSurgery,
@@ -195,19 +213,7 @@ export function VerificationGate({
       if (!res.ok) throw new Error(data.message ?? 'Verification failed.');
       onSuccess(data.token ?? '', name.trim());
     } catch (err: unknown) {
-      const msg = mapFirebaseAuthError(err);
-      if (msg.includes("didn't match")) {
-        const newAttempts = codeAttempts + 1;
-        setCodeAttempts(newAttempts);
-        const left = MAX_CODE_ATTEMPTS - newAttempts;
-        setError(
-          left > 0
-            ? `${msg} ${left} attempt${left !== 1 ? 's' : ''} remaining.`
-            : 'No attempts left. Please request a new code.',
-        );
-      } else {
-        setError(err instanceof Error ? err.message : msg);
-      }
+      setError(err instanceof Error ? err.message : 'Something went wrong. Please try again.');
     } finally {
       setLoading(false);
     }

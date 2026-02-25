@@ -1,89 +1,90 @@
 /**
  * lib/firebase/phone-auth.ts
- * Firebase Phone Authentication — replaces the Nodemailer email-to-SMS system.
- * Only import this in client components ('use client').
+ * Firebase Phone Authentication — client-side only ('use client').
+ * Uses module-level confirmationResult to avoid window storage.
  */
 
-import { getAuth, RecaptchaVerifier, signInWithPhoneNumber } from 'firebase/auth';
+import {
+  getAuth,
+  RecaptchaVerifier,
+  signInWithPhoneNumber,
+  ConfirmationResult,
+} from 'firebase/auth';
 import { clientApp } from './client';
 
-const auth = getAuth(clientApp);
+let confirmationResult: ConfirmationResult | null = null;
 
-export function setupRecaptcha(containerId: string) {
-  if (typeof window === 'undefined') return null;
+export function initRecaptcha() {
+  if (typeof window === 'undefined') return;
 
-  // Clear any existing verifier to allow re-use
+  const auth = getAuth(clientApp);
+
+  // Clear existing verifier
   if ((window as any).recaptchaVerifier) {
     try { (window as any).recaptchaVerifier.clear(); } catch { /* ignore */ }
+    (window as any).recaptchaVerifier = null;
   }
 
-  const verifier = new RecaptchaVerifier(
+  (window as any).recaptchaVerifier = new RecaptchaVerifier(
     auth,
-    containerId,
-    {
-      size: 'invisible',
-      callback: () => {},
-      'expired-callback': () => {
-        if ((window as any).recaptchaVerifier) {
-          try { (window as any).recaptchaVerifier.clear(); } catch { /* ignore */ }
-        }
-      },
-    },
+    'recaptcha-container',
+    { size: 'invisible' },
   );
-
-  (window as any).recaptchaVerifier = verifier;
-  return verifier;
 }
 
-/**
- * Send a Firebase OTP to the given US phone number.
- * Returns the E.164-formatted phone string used.
- */
-export async function sendVerificationCode(phoneNumber: string): Promise<string> {
-  // Format to E.164: +1XXXXXXXXXX
-  const cleaned   = phoneNumber.replace(/\D/g, '');
-  const formatted = cleaned.startsWith('1') ? `+${cleaned}` : `+1${cleaned}`;
+export async function sendSMSCode(
+  phoneNumber: string,
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const auth = getAuth(clientApp);
 
-  const verifier = setupRecaptcha('recaptcha-container');
-  if (!verifier) throw new Error('Recaptcha not ready');
+    const digits = phoneNumber.replace(/\D/g, '');
+    const e164   = digits.startsWith('1') ? `+${digits}` : `+1${digits}`;
 
-  const confirmation = await signInWithPhoneNumber(auth, formatted, verifier);
-  (window as any).confirmationResult = confirmation;
-  return formatted;
+    if (digits.length < 10) {
+      return { success: false, error: 'Please enter a valid 10-digit US phone number.' };
+    }
+
+    initRecaptcha();
+    const verifier = (window as any).recaptchaVerifier;
+
+    confirmationResult = await signInWithPhoneNumber(auth, e164, verifier);
+    return { success: true };
+
+  } catch (err: any) {
+    console.error('SMS send error:', err.code, err.message);
+    const errorMap: Record<string, string> = {
+      'auth/invalid-phone-number':   'Please enter a valid US phone number.',
+      'auth/too-many-requests':      'Too many attempts. Please wait 15 minutes and try again.',
+      'auth/quota-exceeded':         'SMS service temporarily unavailable. Try again shortly.',
+      'auth/captcha-check-failed':   'Security check failed. Please refresh the page.',
+      'auth/missing-phone-number':   'Please enter your phone number first.',
+    };
+    return { success: false, error: errorMap[err.code] ?? `Verification failed. Please try again.` };
+  }
 }
 
-/**
- * Confirm the 6-digit Firebase OTP.
- * Returns { idToken, phone } on success — pass idToken to /api/verify-code
- * so the server can create the lead and issue a JWT.
- */
-export async function verifyCode(code: string): Promise<{ idToken: string; phone: string }> {
-  const confirmation = (window as any).confirmationResult;
-  if (!confirmation) throw new Error('No pending verification');
+export async function verifySMSCode(
+  code: string,
+): Promise<{ success: boolean; idToken?: string; phone?: string; error?: string }> {
+  if (!confirmationResult) {
+    return { success: false, error: 'No verification in progress. Please request a new code.' };
+  }
 
-  const result  = await confirmation.confirm(code);
-  const idToken = await result.user.getIdToken();
-  const phone   = result.user.phoneNumber ?? '';
-  return { idToken, phone };
-}
+  try {
+    const result  = await confirmationResult.confirm(code);
+    confirmationResult = null;
+    const idToken = await result.user.getIdToken();
+    const phone   = result.user.phoneNumber ?? '';
+    return { success: true, idToken, phone };
 
-/** Map Firebase auth error codes to human-readable messages. */
-export function mapFirebaseAuthError(error: unknown): string {
-  const code = (error as { code?: string })?.code ?? '';
-  switch (code) {
-    case 'auth/invalid-phone-number':
-      return 'Please enter a valid US phone number.';
-    case 'auth/too-many-requests':
-      return 'Too many attempts. Please wait 15 minutes.';
-    case 'auth/code-expired':
-      return 'Code expired. Please request a new one.';
-    case 'auth/invalid-verification-code':
-      return "That code didn't match.";
-    case 'auth/quota-exceeded':
-      return 'Verification temporarily unavailable. Please try again later.';
-    case 'auth/network-request-failed':
-      return 'Network error. Please check your connection and try again.';
-    default:
-      return 'Something went wrong. Please try again.';
+  } catch (err: any) {
+    console.error('SMS verify error:', err.code, err.message);
+    const errorMap: Record<string, string> = {
+      'auth/invalid-verification-code': 'That code is incorrect. Please try again.',
+      'auth/code-expired':              'Code expired. Please request a new one.',
+      'auth/missing-verification-code': 'Please enter the 6-digit code.',
+    };
+    return { success: false, error: errorMap[err.code] ?? 'Verification failed. Please try again.' };
   }
 }

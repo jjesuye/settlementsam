@@ -30,9 +30,8 @@ import type { QuizAnswers, DisqualReason } from '@/lib/quiz/types';
 import { INITIAL_ANSWERS } from '@/lib/quiz/types';
 import { formatCurrency, LOST_WAGES_MAX } from '@/lib/estimator/logic';
 import {
-  sendVerificationCode,
-  verifyCode,
-  mapFirebaseAuthError,
+  sendSMSCode,
+  verifySMSCode,
 } from '@/lib/firebase/phone-auth';
 import { validateEmailFormat } from '@/lib/validate-email';
 
@@ -271,7 +270,7 @@ export function QuizFlow() {
 
   const handleSendCode = async (isResend = false) => {
     if (isResend && resendCount >= MAX_RESENDS) {
-      setVerifyError('Too many attempts. Please try again later.');
+      setVerifyError('Too many attempts. Please refresh the page and try again.');
       return;
     }
     setFormError('');
@@ -288,18 +287,18 @@ export function QuizFlow() {
     }
 
     setLoading(true);
-    try {
-      await sendVerificationCode(phone);
-      if (!isResend) setScreen('verify');
-      setCooldown(60);
-      if (isResend) setResendCount(r => r + 1);
-    } catch (err: unknown) {
-      const msg = mapFirebaseAuthError(err);
-      if (isResend) setVerifyError(msg);
-      else          setFormError(msg);
-    } finally {
-      setLoading(false);
+    const result = await sendSMSCode(phone);
+    setLoading(false);
+
+    if (!result.success) {
+      if (isResend) setVerifyError(result.error ?? 'Failed to send code.');
+      else          setFormError(result.error ?? 'Failed to send code.');
+      return;
     }
+
+    if (!isResend) setScreen('verify');
+    setCooldown(60);
+    if (isResend) setResendCount(r => r + 1);
   };
 
   // ── Verify OTP + save lead ──────────────────────────────────────────────────
@@ -317,15 +316,33 @@ export function QuizFlow() {
     const est   = estimate;
 
     let injuryType = 'soft_tissue';
-    if (answers.hasSurgery)      injuryType = 'spinal';
+    if (answers.hasSurgery)        injuryType = 'spinal';
     else if (answers.hospitalized) injuryType = 'fracture';
 
-    try {
-      const { idToken } = await verifyCode(code);
+    const smsResult = await verifySMSCode(code);
 
+    if (!smsResult.success) {
+      const msg = smsResult.error ?? 'Verification failed. Please try again.';
+      if (msg.includes('incorrect') || msg.includes("didn't match")) {
+        const newAttempts = codeAttempts + 1;
+        setCodeAttempts(newAttempts);
+        const left = MAX_CODE_ATTEMPTS - newAttempts;
+        setVerifyError(
+          left > 0
+            ? `${msg} ${left} attempt${left !== 1 ? 's' : ''} remaining.`
+            : 'No attempts left. Request a new code.',
+        );
+      } else {
+        setVerifyError(msg);
+      }
+      setLoading(false);
+      return;
+    }
+
+    try {
       const body: Record<string, unknown> = {
         ...answers,
-        idToken,
+        idToken:      smsResult.idToken,
         name:         `${firstName.trim()} ${lastName.trim()}`,
         email:        email.trim(),
         injuryType,
@@ -352,19 +369,7 @@ export function QuizFlow() {
       });
       router.push(`/thank-you/lead?${params.toString()}`);
     } catch (err: unknown) {
-      const fbMsg = mapFirebaseAuthError(err);
-      if (fbMsg.includes("didn't match")) {
-        const newAttempts = codeAttempts + 1;
-        setCodeAttempts(newAttempts);
-        const left = MAX_CODE_ATTEMPTS - newAttempts;
-        setVerifyError(
-          left > 0
-            ? `${fbMsg} ${left} attempt${left !== 1 ? 's' : ''} remaining.`
-            : 'No attempts left. Request a new code.',
-        );
-      } else {
-        setVerifyError(err instanceof Error ? err.message : fbMsg);
-      }
+      setVerifyError(err instanceof Error ? err.message : 'Something went wrong. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -530,7 +535,7 @@ export function QuizFlow() {
     return (
       <div className="sq-page">
         <div className="sq-header">
-          <img src="/images/sam-icons/sam-icon.png" className="sq-header-icon" alt="" aria-hidden="true" />
+          <img src="/images/sam-icons/sam-logo.png" className="sq-header-icon" alt="" aria-hidden="true" />
           <div className="sq-progress-bar">
             <div className="sq-progress-fill" style={{ width: `${progressPct}%` }} />
           </div>
@@ -572,7 +577,7 @@ export function QuizFlow() {
         <div id="recaptcha-container" />
 
         <div className="sq-header">
-          <img src="/images/sam-icons/sam-icon.png" className="sq-header-icon" alt="" aria-hidden="true" />
+          <img src="/images/sam-icons/sam-logo.png" className="sq-header-icon" alt="" aria-hidden="true" />
           <div className="sq-progress-bar">
             <div className="sq-progress-fill" style={{ width: '92%' }} />
           </div>
@@ -686,7 +691,7 @@ export function QuizFlow() {
     return (
       <div className="sq-page">
         <div className="sq-header">
-          <img src="/images/sam-icons/sam-icon.png" className="sq-header-icon" alt="" aria-hidden="true" />
+          <img src="/images/sam-icons/sam-logo.png" className="sq-header-icon" alt="" aria-hidden="true" />
           <div className="sq-progress-bar">
             <div className="sq-progress-fill" style={{ width: '97%' }} />
           </div>

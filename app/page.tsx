@@ -74,7 +74,7 @@ export default function LandingPage() {
       <nav className="sl-nav">
         <div className="sl-nav-inner">
           <span className="sl-logo">
-            <img src="/images/sam-icons/sam-icon.png" className="sl-logo-icon" alt="Settlement Sam" />
+            <img src="/images/sam-icons/sam-logo.png" className="sl-logo-icon" alt="Settlement Sam" style={{width:'32px',height:'32px',borderRadius:'50%',objectFit:'cover'}} />
             <span className="sl-logo-text">Settlement Sam</span>
           </span>
           <div className="sl-nav-links">
@@ -101,60 +101,35 @@ export default function LandingPage() {
       {/* ── HERO ────────────────────────────────────────────────────────────── */}
       <section className="sl-hero">
         <div className="container">
-          <div className="sl-hero-grid">
-            {/* Left copy */}
-            <motion.div
-              className="sl-hero-copy"
-              initial="hidden" whileInView="visible"
-              viewport={{ once: true }}
-              variants={stagger}
-            >
-              <motion.div variants={fadeUp} className="sl-hero-badge">
-                Free · No Lawyers · Instant
-              </motion.div>
-              <motion.h1 variants={fadeUp} className="sl-hero-h1">
-                Find Out What Your<br />
-                <span className="sl-text-gold">Injury Case</span> Is Worth
-              </motion.h1>
-              <motion.p variants={fadeUp} className="sl-hero-sub">
-                Insurance companies have algorithms. Now you do too.
-                Sam gives you an honest estimate in under 3 minutes — no signup, no pressure.
-              </motion.p>
-              <motion.div variants={fadeUp} className="sl-hero-actions">
-                <a href="#estimate" className="sl-btn-primary">
-                  Get My Free Estimate
-                </a>
-                <Link href="/quiz" className="sl-btn-secondary">
-                  Take the Full Quiz →
-                </Link>
-              </motion.div>
-              <motion.p variants={fadeUp} className="sl-hero-trust">
-                🔒 Your info is never sold. No spam. No lawyers calling at 2am.
-              </motion.p>
+          <motion.div
+            className="sl-hero-copy"
+            initial="hidden" whileInView="visible"
+            viewport={{ once: true }}
+            variants={stagger}
+          >
+            <motion.div variants={fadeUp} className="sl-hero-badge">
+              Free · No Lawyers · Instant
             </motion.div>
-
-            {/* Sam floating avatar */}
-            <motion.div
-              className="sl-hero-sam"
-              initial={{ opacity: 0, x: 20 }}
-              whileInView={{ opacity: 1, x: 0 }}
-              viewport={{ once: true }}
-              transition={{ duration: 0.6, ease: 'easeOut', delay: 0.2 }}
-            >
-              <div className="sl-sam-avatar-wrap">
-                <img src="/images/sam-icons/sam-logo.png" className="sl-sam-avatar" alt="Settlement Sam" />
-              </div>
-              <motion.div
-                className="sl-speech-bubble"
-                initial={{ opacity: 0, scale: 0.85 }}
-                whileInView={{ opacity: 1, scale: 1 }}
-                viewport={{ once: true }}
-                transition={{ delay: 0.45, duration: 0.35 }}
-              >
-                "Let me show you what you're really worth."
-              </motion.div>
+            <motion.h1 variants={fadeUp} className="sl-hero-h1">
+              Find Out What Your<br />
+              <span className="sl-text-gold">Injury Case</span> Is Worth
+            </motion.h1>
+            <motion.p variants={fadeUp} className="sl-hero-sub">
+              Insurance companies have algorithms. Now you do too.
+              Sam gives you an honest estimate in under 3 minutes — no signup, no pressure.
+            </motion.p>
+            <motion.div variants={fadeUp} className="sl-hero-actions">
+              <a href="#estimate" className="sl-btn-primary">
+                Get My Free Estimate
+              </a>
+              <Link href="/quiz" className="sl-btn-secondary">
+                Take the Full Quiz →
+              </Link>
             </motion.div>
-          </div>
+            <motion.p variants={fadeUp} className="sl-hero-trust">
+              🔒 Your info is never sold. No spam. No lawyers calling at 2am.
+            </motion.p>
+          </motion.div>
         </div>
       </section>
 
@@ -324,6 +299,25 @@ export default function LandingPage() {
           </motion.div>
         </div>
       </section>
+
+      {/* ── FIXED SAM BUBBLE ────────────────────────────────────────────────── */}
+      <div className="sl-sam-fixed">
+        <motion.div
+          className="sl-speech-bubble"
+          initial={{ opacity: 0, scale: 0.85 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ delay: 1.2, duration: 0.35 }}
+        >
+          "Let me show you what you're really worth."
+        </motion.div>
+        <div className="sl-sam-avatar-wrap">
+          <img
+            src="/images/sam-icons/sam-logo.png"
+            alt="Sam"
+            style={{ width: '48px', height: '48px', borderRadius: '50%', objectFit: 'cover' }}
+          />
+        </div>
+      </div>
 
       {/* ── FOOTER ──────────────────────────────────────────────────────────── */}
       <footer className="sl-footer">
