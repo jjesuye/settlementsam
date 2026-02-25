@@ -443,18 +443,18 @@
 /* ── OTP input ──────────────────────────────────────────────────────────────── */
 .ss-code-inputs {
   display:         flex;
-  gap:             10px;
+  gap:             8px;
   justify-content: center;
   margin-top:      4px;
 }
 .ss-code-digit {
-  width:         52px;
-  height:        60px;
+  width:         42px;
+  height:        54px;
   border:        2px solid rgba(255,255,255,0.12);
   border-radius: 12px;
   background:    rgba(255,255,255,0.06);
   color:         #f5f0eb;
-  font-size:     26px;
+  font-size:     22px;
   font-weight:   700;
   text-align:    center;
   outline:       none;

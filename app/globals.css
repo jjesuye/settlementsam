@@ -347,15 +347,15 @@ button { font-family: inherit; }
 }
 .ss-resend-inline:disabled { opacity: 0.4; cursor: not-allowed; }
 
-/* OTP digits */
-.ss-code-inputs { display: flex; gap: 10px; justify-content: center; margin: 6px 0; }
+/* OTP digits — 6-digit Firebase codes */
+.ss-code-inputs { display: flex; gap: 8px; justify-content: center; margin: 6px 0; }
 .ss-code-digit {
-  width: 54px; height: 60px;
+  width: 44px; height: 56px;
   background: var(--ss-card);
   border: 2px solid var(--ss-border);
-  border-radius: 14px;
+  border-radius: 12px;
   color: var(--ss-text);
-  font-size: 24px;
+  font-size: 22px;
   font-weight: 700;
   text-align: center;
   outline: none;
@@ -652,14 +652,14 @@ button { font-family: inherit; }
   align-items: center; gap: 16px;
   text-align: center; padding: 8px 0; width: 100%;
 }
-.sq-code-input { display: flex; gap: 10px; justify-content: center; margin: 4px 0; }
+.sq-code-input { display: flex; gap: 8px; justify-content: center; margin: 4px 0; }
 .sq-code-digit {
-  width: 56px; height: 64px;
+  width: 44px; height: 56px;
   background: var(--ss-bg);
   border: 2px solid var(--ss-border);
-  border-radius: 14px;
+  border-radius: 12px;
   color: var(--ss-text);
-  font-size: 28px; font-weight: 700;
+  font-size: 22px; font-weight: 700;
   text-align: center; outline: none;
   caret-color: transparent;
   transition: border-color 0.15s;
@@ -730,7 +730,7 @@ button { font-family: inherit; }
 /* ── Mobile ──────────────────────────────────────────────────────────────── */
 @media (max-width: 480px) {
   .sq-field-row   { grid-template-columns: 1fr; }
-  .sq-code-digit  { width: 50px; height: 58px; font-size: 24px; }
+  .sq-code-digit  { width: 40px; height: 50px; font-size: 20px; }
   .sq-card        { padding: 24px 20px 20px; }
 }
 

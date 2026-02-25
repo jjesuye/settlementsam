@@ -1,28 +1,31 @@
 /**
  * POST /api/verify-code
  *
- * Accepts { phone, code, name, carrier, injuryType, surgery,
- *           lostWages, estimateLow, estimateHigh,
- *           source?,           -- 'widget' | 'quiz'
- *           // Quiz-only extras (spread from QuizAnswers):
- *           incidentType?, state?, incidentTimeframe?, atFault?,
- *           receivedTreatment?, hospitalized?, hasSurgery?, stillInTreatment?,
- *           missedWork?, insuranceContact?, hasAttorney? }
+ * Firebase Phone Auth replacement for the old email-to-SMS OTP system.
+ * Accepts a Firebase ID token (from client-side Phone Auth confirmation),
+ * verifies it server-side, creates a verified lead in Firestore,
+ * and returns a JWT session token.
  *
- * Validates OTP, marks it used, saves verified lead to Firestore (with quiz
- * scoring when source='quiz'), and returns a JWT session token.
+ * Body: { idToken, name, email?,
+ *         injuryType?, surgery?, lostWages?, estimateLow?, estimateHigh?,
+ *         source?,              -- 'widget' | 'quiz'
+ *         // Quiz-only extras:
+ *         incidentType?, state?, incidentTimeframe?, atFault?,
+ *         receivedTreatment?, hospitalized?, hasSurgery?, stillInTreatment?,
+ *         missedWork?, insuranceContact?, hasAttorney? }
  *
- * Response 200: { success: true, token: string }
+ * Response 200: { success: true, token: string, score: number, tier: string }
  * Response 400: { error: string, message: string }
- * Response 429: { error: 'too_many_attempts', message: string }
+ * Response 401: { error: 'unauthorized', message: string }
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import jwt from 'jsonwebtoken';
-import { adminDb } from '@/lib/firebase/admin';
-import { normalizePhone, MAX_ATTEMPTS } from '@/lib/sms';
+import { adminDb, adminAuth } from '@/lib/firebase/admin';
 import { calculateScore, scoreTier, calculateQuizEstimate } from '@/lib/quiz/scoring';
 import type { QuizAnswers } from '@/lib/quiz/types';
+
+export const dynamic = 'force-dynamic';
 
 const JWT_SECRET  = process.env.JWT_SECRET ?? 'dev-secret-change-in-production';
 const TOKEN_TTL_S = 60 * 60 * 24; // 24-hour session
@@ -40,10 +43,9 @@ export async function POST(req: NextRequest) {
   }
 
   const {
-    phone: rawPhone,
-    code,
+    idToken,
     name,
-    carrier,
+    email,
     injuryType,
     surgery,
     lostWages,
@@ -63,59 +65,33 @@ export async function POST(req: NextRequest) {
     state: leadState,
   } = body;
 
-  const phone = normalizePhone(String(rawPhone ?? ''));
-
-  if (!phone || String(code ?? '').replace(/\D/g, '').length !== 4) {
+  if (!idToken || typeof idToken !== 'string') {
     return NextResponse.json(
-      { error: 'invalid_input', message: 'Phone number and 4-digit code are both required.' },
+      { error: 'invalid_input', message: 'Firebase ID token is required.' },
       { status: 400 },
     );
   }
 
-  // ── Fetch active codes for this phone ────────────────────────────────────────
-  const snap = await adminDb
-    .collection('verification_codes')
-    .where('phone', '==', phone)
-    .where('used', '==', false)
-    .get();
-
-  const now         = Date.now();
-  const activeDocs  = snap.docs
-    .filter(d => (d.data().expires_at as number) > now)
-    .sort((a, b) => (b.data().timestamp as number) - (a.data().timestamp as number));
-
-  if (activeDocs.length === 0) {
+  // ── Verify Firebase ID token server-side ─────────────────────────────────────
+  let phone: string;
+  try {
+    const decoded = await (adminAuth as any).verifyIdToken(idToken);
+    const rawPhone = String(decoded.phone_number ?? '');
+    if (!rawPhone) throw new Error('No phone_number claim in token');
+    // Normalize to 10-digit (strip +1 country code)
+    const digits = rawPhone.replace(/\D/g, '');
+    phone = digits.length === 11 && digits.startsWith('1') ? digits.slice(1) : digits;
+    if (phone.length !== 10) throw new Error(`Unexpected phone length: ${phone.length}`);
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : 'Unknown error';
+    console.error('[verify-code] Firebase token error:', msg);
     return NextResponse.json(
-      { error: 'expired', message: "That code has expired. Hit 'Resend' to get a fresh one." },
-      { status: 400 },
+      { error: 'unauthorized', message: 'Phone verification failed. Please try again.' },
+      { status: 401 },
     );
   }
 
-  const record     = activeDocs[0];
-  const recordData = record.data();
-
-  if ((recordData.attempts as number) >= MAX_ATTEMPTS) {
-    return NextResponse.json(
-      { error: 'too_many_attempts', message: 'Too many wrong attempts. Request a new code.' },
-      { status: 429 },
-    );
-  }
-
-  // ── Compare codes ────────────────────────────────────────────────────────────
-  if (String(recordData.code) !== String(code).trim()) {
-    await record.ref.update({ attempts: (recordData.attempts as number) + 1 });
-    const attemptsUsed = (recordData.attempts as number) + 1;
-    const left         = MAX_ATTEMPTS - attemptsUsed;
-
-    const message = left > 0
-      ? `Hmm, that code didn't match. ${left} attempt${left !== 1 ? 's' : ''} left. Want Sam to resend it?`
-      : 'No attempts left. Request a new code.';
-
-    return NextResponse.json({ error: 'invalid_code', message }, { status: 400 });
-  }
-
-  // ── Code matched — mark used ─────────────────────────────────────────────────
-  await record.ref.update({ used: true });
+  const now = Date.now();
 
   // ── Build quiz answers for scoring (quiz mode only) ───────────────────────────
   const isQuiz = String(source) === 'quiz';
@@ -149,7 +125,7 @@ export async function POST(req: NextRequest) {
     finalHigh = est.high;
   }
 
-  // ── Derive boolean values ────────────────────────────────────────────────────
+  // ── Derive boolean field values ──────────────────────────────────────────────
   const hasSurgeryBool         = hasSurgery  != null ? Boolean(hasSurgery)  : Boolean(surgery);
   const hospitalizedBool       = hospitalized != null ? Boolean(hospitalized) : false;
   const stillTreatingBool      = stillInTreatment === 'yes';
@@ -165,10 +141,10 @@ export async function POST(req: NextRequest) {
     const leadRef = await adminDb.collection('leads').add({
       name:                String(name  ?? '').trim(),
       phone,
-      email:               null,
-      carrier:             String(carrier       ?? ''),
-      state:               String(leadState     ?? '') || null,
-      injury_type:         String(injuryType    ?? 'soft_tissue'),
+      email:               email ? String(email).trim() : null,
+      carrier:             'firebase',
+      state:               String(leadState ?? '') || null,
+      injury_type:         String(injuryType ?? 'soft_tissue'),
       surgery:             hasSurgeryBool,
       hospitalized:        hospitalizedBool,
       still_treating:      stillTreatingBool,
@@ -205,6 +181,10 @@ export async function POST(req: NextRequest) {
     { expiresIn: TOKEN_TTL_S },
   );
 
-  console.log(`[verify-code] ✓ ${String(source).toUpperCase()} lead verified: ${String(name ?? '').trim()} (${phone}) score=${score} tier=${tier}`);
+  console.log(
+    `[verify-code] ✓ ${String(source).toUpperCase()} lead verified: ` +
+    `${String(name ?? '').trim()} (${phone}) score=${score} tier=${tier}`,
+  );
+
   return NextResponse.json({ success: true, token, score, tier });
 }

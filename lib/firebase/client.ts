@@ -16,4 +16,5 @@ const config = {
 };
 
 const app = getApps().length === 0 ? initializeApp(config) : getApps()[0];
+export const clientApp = app;
 export const db = getFirestore(app);

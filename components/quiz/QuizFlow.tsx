@@ -2,13 +2,13 @@
 /**
  * components/quiz/QuizFlow.tsx
  *
- * 11 questions → contact form → SMS verify → results
+ * 11 questions → contact form → Firebase SMS verify → results
  *
  * Screens:
  *   'quiz'          — questions 1–11
- *   'contact'       — first name, last name, phone, email, carrier
- *   'verify'        — 4-digit SMS code
- *   'success'       — personalized results with tier, estimate, key factors
+ *   'contact'       — first name, last name, phone, email
+ *   'verify'        — 6-digit Firebase OTP
+ *   'success'       — personalized results with estimate, key factors
  *   'attorney_exit' — soft exit when hasAttorney = 'yes'
  *   'disqualified'  — hard exit when atFault = true
  */
@@ -19,8 +19,6 @@ import Link from 'next/link';
 import { QUIZ_QUESTIONS, US_STATES } from '@/lib/quiz/questions';
 import type { QuizQuestion, QuizOption } from '@/lib/quiz/questions';
 import {
-  checkDisqualifier,
-  checkSoftExit,
   calculateScore,
   scoreTier,
   calculateQuizEstimate,
@@ -30,9 +28,20 @@ import {
 import type { QuizAnswers, DisqualReason } from '@/lib/quiz/types';
 import { INITIAL_ANSWERS } from '@/lib/quiz/types';
 import { formatCurrency, LOST_WAGES_MAX } from '@/lib/estimator/logic';
-import { CARRIERS } from '@/components/widget/VerificationGate';
+import {
+  sendVerificationCode,
+  verifyCode,
+  mapFirebaseAuthError,
+} from '@/lib/firebase/phone-auth';
 
-// ── Carrier list (reuse from widget) ─────────────────────────────────────────
+// ── Phone formatter ────────────────────────────────────────────────────────────
+
+function formatPhone(raw: string): string {
+  const d = raw.replace(/\D/g, '').slice(0, 10);
+  if (d.length <= 3)  return d;
+  if (d.length <= 6)  return `(${d.slice(0, 3)}) ${d.slice(3)}`;
+  return `(${d.slice(0, 3)}) ${d.slice(3, 6)}-${d.slice(6)}`;
+}
 
 // ── Reducer ───────────────────────────────────────────────────────────────────
 
@@ -57,11 +66,13 @@ const slideVariants = {
 };
 const springTransition = { type: 'spring' as const, stiffness: 320, damping: 30 };
 
-// ── 4-digit code input ────────────────────────────────────────────────────────
+// ── 6-digit code input ────────────────────────────────────────────────────────
+
+const CODE_LENGTH = 6;
 
 function SqCodeInput({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const slots = value.padEnd(4, ' ').split('').slice(0, 4);
+  const slots = value.padEnd(CODE_LENGTH, ' ').split('').slice(0, CODE_LENGTH);
 
   const focusAt = (i: number) => {
     const els = containerRef.current?.querySelectorAll<HTMLInputElement>('.sq-code-digit');
@@ -72,7 +83,7 @@ function SqCodeInput({ value, onChange }: { value: string; onChange: (v: string)
     const digit = char.replace(/\D/g, '').slice(-1);
     const next  = slots.map((s, idx) => (idx === i ? (digit || ' ') : s));
     onChange(next.join('').trimEnd());
-    if (digit && i < 3) focusAt(i + 1);
+    if (digit && i < CODE_LENGTH - 1) focusAt(i + 1);
   };
 
   const handleKeyDown = (i: number, e: React.KeyboardEvent) => {
@@ -83,19 +94,19 @@ function SqCodeInput({ value, onChange }: { value: string; onChange: (v: string)
       } else if (i > 0) {
         focusAt(i - 1);
       }
-    } else if (e.key === 'ArrowLeft'  && i > 0) focusAt(i - 1);
-      else if (e.key === 'ArrowRight' && i < 3) focusAt(i + 1);
+    } else if (e.key === 'ArrowLeft'  && i > 0)              focusAt(i - 1);
+      else if (e.key === 'ArrowRight' && i < CODE_LENGTH - 1) focusAt(i + 1);
   };
 
   const handlePaste = (e: React.ClipboardEvent) => {
-    const pasted = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 4);
-    if (pasted) { onChange(pasted); focusAt(Math.min(pasted.length, 3)); }
+    const pasted = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, CODE_LENGTH);
+    if (pasted) { onChange(pasted); focusAt(Math.min(pasted.length, CODE_LENGTH - 1)); }
     e.preventDefault();
   };
 
   return (
     <div ref={containerRef} className="sq-code-input" onPaste={handlePaste}>
-      {[0, 1, 2, 3].map(i => (
+      {Array.from({ length: CODE_LENGTH }, (_, i) => (
         <input
           key={i}
           className={`sq-code-digit${slots[i].trim() ? ' sq-code-digit--filled' : ''}`}
@@ -147,18 +158,22 @@ export function QuizFlow() {
   const [alert, setAlert]         = useState<{ type: 'warning' | 'tip' | 'success'; msg: string } | null>(null);
 
   // Contact form
-  const [firstName, setFirstName] = useState('');
-  const [lastName,  setLastName]  = useState('');
-  const [phone,     setPhone]     = useState('');
-  const [email,     setEmail]     = useState('');
-  const [carrier,   setCarrier]   = useState('');
-  const [formError, setFormError] = useState('');
+  const [firstName,   setFirstName]  = useState('');
+  const [lastName,    setLastName]   = useState('');
+  const [phone,       setPhone]      = useState('');
+  const [email,       setEmail]      = useState('');
+  const [formError,   setFormError]  = useState('');
 
   // Verify
   const [code,        setCode]        = useState('');
   const [loading,     setLoading]     = useState(false);
   const [verifyError, setVerifyError] = useState('');
   const [cooldown,    setCooldown]    = useState(0);
+  const [resendCount, setResendCount] = useState(0);
+  const [codeAttempts, setCodeAttempts] = useState(0);
+
+  const MAX_RESENDS       = 3;
+  const MAX_CODE_ATTEMPTS = 5;
 
   const totalQuestions = QUIZ_QUESTIONS.length;
   const currentQ = QUIZ_QUESTIONS[stepPos] ?? QUIZ_QUESTIONS[0];
@@ -172,6 +187,8 @@ export function QuizFlow() {
     const t = setTimeout(() => setCooldown(c => c - 1), 1_000);
     return () => clearTimeout(t);
   }, [cooldown]);
+
+  const formatCooldown = (s: number) => `0:${String(s).padStart(2, '0')}`;
 
   const setAnswer = useCallback((key: keyof QuizAnswers, value: unknown) => {
     dispatch({ type: 'SET_ANSWER', key, value });
@@ -204,8 +221,9 @@ export function QuizFlow() {
     setDisqReason(null);
     setAlert(null);
     setFirstName(''); setLastName(''); setPhone('');
-    setEmail(''); setCarrier(''); setFormError('');
+    setEmail(''); setFormError('');
     setCode(''); setVerifyError(''); setCooldown(0);
+    setResendCount(0); setCodeAttempts(0);
   }, []);
 
   /** Parse string option value to typed value */
@@ -219,7 +237,6 @@ export function QuizFlow() {
   const handleOptionClick = (q: QuizQuestion, opt: QuizOption) => {
     const parsed = parseValue(opt.value);
 
-    // Hard disqualifier
     if (opt.isDisq) {
       setAnswer(q.id, parsed);
       setDisqReason('at_fault');
@@ -227,7 +244,6 @@ export function QuizFlow() {
       return;
     }
 
-    // Soft exit (has attorney)
     if (opt.isSoftExit) {
       setAnswer(q.id, parsed);
       setScreen('attorney_exit');
@@ -236,7 +252,6 @@ export function QuizFlow() {
 
     setAnswer(q.id, parsed);
 
-    // Determine alert
     const alertMsg  = opt.reaction || opt.warning || opt.tip || null;
     const alertType = opt.reaction ? 'success' : opt.warning ? 'warning' : 'tip';
 
@@ -248,81 +263,66 @@ export function QuizFlow() {
     }
   };
 
-  // ── Send code (from contact form) ──────────────────────────────────────────
+  // ── Send Firebase OTP (from contact form) ──────────────────────────────────
 
-  const handleSendCode = async () => {
+  const handleSendCode = async (isResend = false) => {
+    if (isResend && resendCount >= MAX_RESENDS) {
+      setVerifyError('Too many attempts. Please try again later.');
+      return;
+    }
     setFormError('');
-    const cleanPhone = phone.replace(/\D/g, '');
-    if (!firstName.trim())              return setFormError('Please enter your first name.');
-    if (!lastName.trim())               return setFormError('Please enter your last name.');
-    if (cleanPhone.length !== 10)       return setFormError('Please enter a valid 10-digit phone number.');
-    if (!email.trim() || !email.includes('@')) return setFormError('Please enter a valid email address.');
-    if (!carrier)                       return setFormError('Please select your mobile carrier.');
-
-    setLoading(true);
-    try {
-      const res  = await fetch('/api/send-code', {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ name: `${firstName.trim()} ${lastName.trim()}`, phone: cleanPhone, carrier }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message ?? 'Failed to send code.');
-      setScreen('verify');
-      setCooldown(60);
-    } catch (err: unknown) {
-      setFormError(err instanceof Error ? err.message : 'Something went wrong. Please try again.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // ── Resend code ────────────────────────────────────────────────────────────
-
-  const handleResend = async () => {
-    if (cooldown > 0 || loading) return;
     setVerifyError('');
+
+    if (!isResend) {
+      // Validate contact form fields
+      const cleanPhone = phone.replace(/\D/g, '');
+      if (!firstName.trim())                        return setFormError('Please enter your first name.');
+      if (!lastName.trim())                         return setFormError('Please enter your last name.');
+      if (cleanPhone.length !== 10)                 return setFormError('Please enter a valid 10-digit phone number.');
+      if (!email.trim() || !email.includes('@'))    return setFormError('Please enter a valid email address.');
+    }
+
     setLoading(true);
     try {
-      const cleanPhone = phone.replace(/\D/g, '');
-      const res  = await fetch('/api/send-code', {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ name: `${firstName.trim()} ${lastName.trim()}`, phone: cleanPhone, carrier }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message ?? 'Failed to resend code.');
+      await sendVerificationCode(phone);
+      if (!isResend) setScreen('verify');
       setCooldown(60);
+      if (isResend) setResendCount(r => r + 1);
     } catch (err: unknown) {
-      setVerifyError(err instanceof Error ? err.message : 'Failed to resend. Try again.');
+      const msg = mapFirebaseAuthError(err);
+      if (isResend) setVerifyError(msg);
+      else          setFormError(msg);
     } finally {
       setLoading(false);
     }
   };
 
-  // ── Verify code ────────────────────────────────────────────────────────────
+  // ── Verify OTP + save lead ──────────────────────────────────────────────────
 
   const handleVerifyCode = async () => {
+    if (codeAttempts >= MAX_CODE_ATTEMPTS) {
+      setVerifyError('Too many wrong attempts. Request a new code.');
+      return;
+    }
     setVerifyError('');
     setLoading(true);
-    const cleanPhone = phone.replace(/\D/g, '');
-    const est = estimate;
+
     const score = calculateScore(answers as QuizAnswers);
     const tier  = scoreTier(score);
+    const est   = estimate;
 
-    // Derive injury type for legacy field
     let injuryType = 'soft_tissue';
     if (answers.hasSurgery)      injuryType = 'spinal';
     else if (answers.hospitalized) injuryType = 'fracture';
 
     try {
+      const { idToken } = await verifyCode(code);
+
       const body: Record<string, unknown> = {
         ...answers,
-        phone:        cleanPhone,
-        code:         code.replace(/\s/g, ''),
+        idToken,
         name:         `${firstName.trim()} ${lastName.trim()}`,
         email:        email.trim(),
-        carrier,
         injuryType,
         surgery:      answers.hasSurgery,
         estimateLow:  est.low,
@@ -331,6 +331,7 @@ export function QuizFlow() {
         tier,
         source:       'quiz',
       };
+
       const res  = await fetch('/api/verify-code', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -340,7 +341,19 @@ export function QuizFlow() {
       if (!res.ok) throw new Error(data.message ?? 'Verification failed.');
       setScreen('success');
     } catch (err: unknown) {
-      setVerifyError(err instanceof Error ? err.message : 'Something went wrong. Try again.');
+      const fbMsg = mapFirebaseAuthError(err);
+      if (fbMsg.includes("didn't match")) {
+        const newAttempts = codeAttempts + 1;
+        setCodeAttempts(newAttempts);
+        const left = MAX_CODE_ATTEMPTS - newAttempts;
+        setVerifyError(
+          left > 0
+            ? `${fbMsg} ${left} attempt${left !== 1 ? 's' : ''} remaining.`
+            : 'No attempts left. Request a new code.',
+        );
+      } else {
+        setVerifyError(err instanceof Error ? err.message : fbMsg);
+      }
     } finally {
       setLoading(false);
     }
@@ -384,10 +397,10 @@ export function QuizFlow() {
 
     // Wages-with-slider (Q9)
     if (q.type === 'wages-with-slider') {
-      const workVal = currentVal as string | null;
+      const workVal  = currentVal as string | null;
       const showSlider = workVal === 'yes_missed' || workVal === 'yes_cant_work';
-      const wages = answers.lostWages;
-      const pct   = (wages / LOST_WAGES_MAX) * 100;
+      const wages    = answers.lostWages;
+      const pct      = (wages / LOST_WAGES_MAX) * 100;
       const sliderBg = `linear-gradient(to right, #E8A838 0%, #E8A838 ${pct}%, #E8DCC8 ${pct}%, #E8DCC8 100%)`;
 
       return (
@@ -547,6 +560,9 @@ export function QuizFlow() {
   if (screen === 'contact') {
     return (
       <div className="sq-page">
+        {/* Invisible reCAPTCHA anchor */}
+        <div id="recaptcha-container" />
+
         <div className="sq-topbar">
           <div className="sq-brand">
             <img src="/images/sam-icons/sam-logo.png" height={24} alt="" aria-hidden="true" className="sq-brand-icon" style={{ borderRadius: '50%', objectFit: 'contain' }} />
@@ -572,7 +588,7 @@ export function QuizFlow() {
             />
             <h2 className="sq-headline" style={{ marginBottom: 4 }}>One last thing…</h2>
             <p className="sq-sub" style={{ marginBottom: 0 }}>
-              Where should Sam send your results? I'll text you a quick verification code.
+              Where should we send your results? We'll text you a quick verification code.
             </p>
           </div>
 
@@ -612,7 +628,7 @@ export function QuizFlow() {
                 type="tel"
                 placeholder="(555) 867-5309"
                 value={phone}
-                onChange={e => setPhone(e.target.value)}
+                onChange={e => setPhone(formatPhone(e.target.value))}
                 autoComplete="tel"
                 inputMode="tel"
               />
@@ -631,41 +647,18 @@ export function QuizFlow() {
               />
             </div>
 
-            <div className="sq-field">
-              <label className="sq-field-label" htmlFor="sq-carrier">Mobile Carrier</label>
-              <div className="sq-select-wrap">
-                <select
-                  id="sq-carrier"
-                  className="sq-select"
-                  value={carrier}
-                  onChange={e => setCarrier(e.target.value)}
-                >
-                  <option value="">Select your carrier…</option>
-                  {CARRIERS.map(c => (
-                    <option key={`${c.label}-${c.gateway}`} value={c.gateway}>{c.label}</option>
-                  ))}
-                </select>
-                <span className="sq-select-arrow" aria-hidden="true">▾</span>
-              </div>
-              <p style={{ fontSize: 11, color: 'var(--ss-muted)', margin: '4px 0 0', lineHeight: 1.5 }}>
-                {carrier === 'MULTI_BLAST'
-                  ? "📡 Sam will blast all major gateways — you'll get it on whichever matches your phone."
-                  : 'Not sure? Select "I\'m not sure / Other" and Sam will figure it out.'}
-              </p>
-            </div>
-
             {formError && <p className="sq-form-error" role="alert">{formError}</p>}
 
             <button
               className="sq-btn-submit"
-              onClick={handleSendCode}
+              onClick={() => handleSendCode(false)}
               disabled={loading}
             >
               {loading ? 'Sending your code…' : 'Send Me My Results →'}
             </button>
 
             <p className="sq-privacy-note">
-              🔒 Sam never sells your info. Standard SMS rates may apply.
+              🔒 Your info is safe. Standard SMS rates may apply.
             </p>
           </div>
 
@@ -681,7 +674,7 @@ export function QuizFlow() {
   // SCREEN: VERIFY
   // ══════════════════════════════════════════════════════════════════════════
   if (screen === 'verify') {
-    const canVerify = code.replace(/\s/g, '').length === 4;
+    const canVerify = code.replace(/\s/g, '').length === CODE_LENGTH;
     return (
       <div className="sq-page">
         <div className="sq-topbar">
@@ -711,7 +704,7 @@ export function QuizFlow() {
             <div>
               <h2 className="sq-headline" style={{ marginBottom: 6 }}>Check your texts!</h2>
               <p className="sq-sub" style={{ marginBottom: 0 }}>
-                Sam sent a 4-digit code to <strong>{phone}</strong>.
+                We sent a 6-digit code to <strong>{phone}</strong>.
               </p>
             </div>
 
@@ -732,13 +725,21 @@ export function QuizFlow() {
               {loading ? 'Unlocking…' : 'Unlock My Results →'}
             </button>
 
-            <button
-              className="sq-resend-btn"
-              onClick={handleResend}
-              disabled={cooldown > 0 || loading}
-            >
-              {cooldown > 0 ? `Resend code in ${cooldown}s` : "Didn't get it? Resend →"}
-            </button>
+            {resendCount < MAX_RESENDS ? (
+              <button
+                className="sq-resend-btn"
+                onClick={() => handleSendCode(true)}
+                disabled={cooldown > 0 || loading}
+              >
+                {cooldown > 0
+                  ? `Resend code in ${formatCooldown(cooldown)}`
+                  : "Didn't get it? Resend →"}
+              </button>
+            ) : (
+              <p className="sq-resend-btn" style={{ cursor: 'default', opacity: 0.5 }}>
+                Too many attempts. Please try again later.
+              </p>
+            )}
 
             <button className="sq-btn-back-plain" onClick={() => setScreen('contact')}>
               ← Change my number
@@ -753,14 +754,8 @@ export function QuizFlow() {
   // SCREEN: SUCCESS
   // ══════════════════════════════════════════════════════════════════════════
   if (screen === 'success') {
-    const score    = calculateScore(answers as QuizAnswers);
-    const tier     = scoreTier(score);
-    const est      = calculateQuizEstimate(answers as QuizAnswers);
-    const factors  = getKeyFactors(answers as QuizAnswers);
-
-    const tierLabel = tier === 'HOT'  ? '🔥 High-Value Case'
-                    : tier === 'WARM' ? '⭐ Strong Case'
-                    :                   '📋 Case Logged';
+    const est     = calculateQuizEstimate(answers as QuizAnswers);
+    const factors = getKeyFactors(answers as QuizAnswers);
 
     return (
       <div className="sq-page">
@@ -797,20 +792,11 @@ export function QuizFlow() {
               {firstName ? `You're in, ${firstName}!` : "You're in!"}
             </h2>
 
-            <motion.span
-              className={`sq-tier sq-tier--${tier}`}
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.2 }}
-            >
-              {tierLabel}
-            </motion.span>
-
             <motion.div
               className="sq-estimate-block"
               initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.3 }}
+              transition={{ delay: 0.2 }}
             >
               <div className="sq-range-label">Your case may be worth</div>
               <div className="sq-range-value">
@@ -823,7 +809,7 @@ export function QuizFlow() {
                 className="sq-factors"
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.4 }}
+                transition={{ delay: 0.3 }}
               >
                 <p className="sq-factors-title">Factors working in your favor</p>
                 <ul className="sq-factors-list">
@@ -831,7 +817,6 @@ export function QuizFlow() {
                     <li key={f.label} className="sq-factor-check">
                       <span style={{ color: 'var(--ss-green)', fontWeight: 700 }}>✓</span>
                       <span>{f.label}</span>
-                      <span style={{ marginLeft: 'auto', color: 'var(--ss-amber)', fontWeight: 700, fontSize: 12 }}>{f.points}</span>
                     </li>
                   ))}
                 </ul>
@@ -842,13 +827,13 @@ export function QuizFlow() {
               className="sq-next-steps"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              transition={{ delay: 0.5 }}
+              transition={{ delay: 0.4 }}
             >
               <p className="sq-factors-title">What happens next</p>
               <ol>
-                <li>Sam shares your details with 1–2 pre-screened attorneys{answers.state ? ` in ${answers.state}` : ''}.</li>
-                <li>An attorney will contact you within 1 business day.</li>
-                <li>The consultation is 100% free, with no obligation.</li>
+                <li>A licensed attorney reviews your case details{answers.state ? ` in ${answers.state}` : ''}.</li>
+                <li>They will contact you within 1 business day.</li>
+                <li>Your free consultation is 100% free, no obligation.</li>
               </ol>
             </motion.div>
 
@@ -857,13 +842,13 @@ export function QuizFlow() {
               href="/attorneys"
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.6 }}
+              transition={{ delay: 0.5 }}
             >
               Chat With an Attorney Now →
             </motion.a>
 
             <p className="sq-urgency">
-              🗓 Sam's attorney network fills fast. Your spot is reserved for 24 hours.
+              🗓 Your case details have been submitted. An attorney will reach out within 1 business day.
             </p>
 
             <p style={{ fontSize: 11, color: 'var(--ss-muted)', margin: '4px 0 0', textAlign: 'center', lineHeight: 1.6 }}>
@@ -912,7 +897,7 @@ export function QuizFlow() {
             </h2>
             <p className="sq-disq-sub">
               You already have an attorney fighting for you. Keep working with them —
-              they're your best resource. Sam doesn't want to step on their toes.
+              they're your best resource.
             </p>
 
             <div className="sq-attorney-questions">
