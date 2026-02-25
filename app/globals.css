@@ -1482,6 +1482,42 @@ html, body { overflow-x: hidden; max-width: 100vw; }
 .ty-home-btn:hover { color: var(--ss-text); border-color: var(--ss-amber); }
 .ty-calendar-section { width: 100%; }
 
+/* ── Contact preference widget ────────────────────────────────────────────── */
+.ty-pref-widget {
+  width: 100%; background: var(--ss-bg); border: 1px solid var(--ss-border);
+  border-radius: 16px; padding: 24px; text-align: left;
+}
+.ty-pref-title { font-size: 18px; font-weight: 700; color: var(--ss-text); margin: 0 0 6px; }
+.ty-pref-sub   { font-size: 14px; color: var(--ss-muted); margin: 0 0 20px; }
+.ty-pref-pills { display: flex; flex-direction: column; gap: 10px; }
+.ty-pref-pill {
+  display: flex; align-items: center; gap: 12px;
+  padding: 14px 20px; border-radius: 12px;
+  border: 2px solid var(--ss-border); background: white;
+  color: var(--ss-text); font-size: 15px; font-weight: 500;
+  cursor: pointer; text-align: left; transition: all 0.18s; width: 100%;
+}
+.ty-pref-pill:hover        { border-color: var(--ss-gold); background: #FFFBF2; }
+.ty-pref-pill--selected    { border-color: var(--ss-gold); background: #FFFBF2; font-weight: 600; }
+.ty-pref-pill-icon         { font-size: 20px; flex-shrink: 0; }
+.ty-pref-slots             { overflow: hidden; }
+.ty-pref-slots-label       { font-size: 14px; color: var(--ss-muted); margin: 20px 0 12px; font-weight: 500; }
+.ty-pref-save-btn {
+  margin-top: 20px; width: 100%; padding: 14px 24px;
+  background: var(--ss-gold); color: white; border: none;
+  border-radius: 12px; font-size: 16px; font-weight: 700;
+  cursor: pointer; transition: background 0.2s;
+}
+.ty-pref-save-btn:hover:not(:disabled) { background: #d49530; }
+.ty-pref-save-btn:disabled             { opacity: 0.65; cursor: not-allowed; }
+.ty-pref-saved {
+  display: flex; align-items: center; gap: 12px;
+  background: #EEF6EE; border: 1px solid #4A7C59;
+  border-radius: 12px; padding: 16px 20px;
+}
+.ty-pref-saved-icon { font-size: 22px; color: #4A7C59; font-weight: 700; }
+.ty-pref-saved p    { font-size: 15px; color: #2C3E35; font-weight: 500; margin: 0; }
+
 /* ── Calendar widget ──────────────────────────────────────────────────────── */
 .cal-widget { width: 100%; text-align: left; }
 .cal-title { font-size: 20px; font-weight: 700; color: var(--ss-text); margin: 0 0 4px; }

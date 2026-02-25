@@ -344,10 +344,11 @@ export function QuizFlow() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message ?? 'Verification failed.');
-      // Redirect to lead thank-you page with name and state
+      // Redirect to lead thank-you page with name, state, and leadId
       const params = new URLSearchParams({
-        name: firstName.trim(),
-        state: String(answers.state ?? ''),
+        name:   firstName.trim(),
+        state:  String(answers.state ?? ''),
+        leadId: String(data.leadId ?? ''),
       });
       router.push(`/thank-you/lead?${params.toString()}`);
     } catch (err: unknown) {

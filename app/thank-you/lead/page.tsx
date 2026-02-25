@@ -3,15 +3,14 @@
  * app/thank-you/lead/page.tsx
  *
  * Thank you page shown after a lead completes the quiz + SMS verification.
- * Dynamic data (first name, state) pulled from URL search params.
- * Redirects to /quiz if accessed directly without params.
+ * Dynamic data (first name, state, leadId) pulled from URL search params.
  *
- * URL: /thank-you/lead?name=Sam&state=California
+ * URL: /thank-you/lead?name=Sam&state=California&leadId=abc123
  */
 
+import { useState, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { motion } from 'framer-motion';
-import { Suspense } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
 
 const fadeUp = {
@@ -20,10 +19,131 @@ const fadeUp = {
 };
 const stagger = { visible: { transition: { staggerChildren: 0.12 } } };
 
+// ── Contact preference ────────────────────────────────────────────────────────
+
+type Timing   = 'asap' | 'later_today' | 'tomorrow';
+type TimeSlot = 'morning' | 'afternoon' | 'evening';
+
+const TIMING_OPTIONS: { value: Timing; icon: string; label: string }[] = [
+  { value: 'asap',        icon: '⚡', label: 'As soon as possible' },
+  { value: 'later_today', icon: '🕐', label: 'Later today'         },
+  { value: 'tomorrow',    icon: '📅', label: 'Tomorrow'            },
+];
+
+const SLOT_OPTIONS: { value: TimeSlot; icon: string; label: string }[] = [
+  { value: 'morning',   icon: '🌅', label: 'Early Morning (8–11 AM)' },
+  { value: 'afternoon', icon: '☀️', label: 'Afternoon (12–4 PM)'     },
+  { value: 'evening',   icon: '🌆', label: 'Evening (4–7 PM)'        },
+];
+
+function ContactPreference({ leadId }: { leadId: string }) {
+  const [timing,   setTiming]   = useState<Timing | null>(null);
+  const [timeSlot, setTimeSlot] = useState<TimeSlot | null>(null);
+  const [saved,    setSaved]    = useState(false);
+  const [saving,   setSaving]   = useState(false);
+
+  async function handleSave() {
+    if (!timing || !timeSlot || !leadId) return;
+    setSaving(true);
+    try {
+      await fetch('/api/leads/contact-preference', {
+        method:  'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ leadId, timing, time_slot: timeSlot }),
+      });
+      setSaved(true);
+    } catch { /* non-fatal */ } finally {
+      setSaving(false);
+    }
+  }
+
+  if (saved) {
+    return (
+      <motion.div
+        className="ty-pref-saved"
+        initial={{ opacity: 0, scale: 0.96 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ type: 'spring', stiffness: 260, damping: 22 }}
+      >
+        <span className="ty-pref-saved-icon">✓</span>
+        <p>Got it! We'll reach out at your preferred time.</p>
+      </motion.div>
+    );
+  }
+
+  return (
+    <div className="ty-pref-widget">
+      <h3 className="ty-pref-title">When should we contact you?</h3>
+      <p className="ty-pref-sub">Pick your preferred time and we'll make it happen.</p>
+
+      {/* Timing pills */}
+      <div className="ty-pref-pills">
+        {TIMING_OPTIONS.map(opt => (
+          <button
+            key={opt.value}
+            className={`ty-pref-pill${timing === opt.value ? ' ty-pref-pill--selected' : ''}`}
+            onClick={() => { setTiming(opt.value); setTimeSlot(null); }}
+          >
+            <span className="ty-pref-pill-icon">{opt.icon}</span>
+            {opt.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Time slot pills (shown after timing selection) */}
+      <AnimatePresence>
+        {timing && (
+          <motion.div
+            className="ty-pref-slots"
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.22 }}
+          >
+            <p className="ty-pref-slots-label">What time of day works best?</p>
+            <div className="ty-pref-pills">
+              {SLOT_OPTIONS.map(opt => (
+                <button
+                  key={opt.value}
+                  className={`ty-pref-pill${timeSlot === opt.value ? ' ty-pref-pill--selected' : ''}`}
+                  onClick={() => setTimeSlot(opt.value)}
+                >
+                  <span className="ty-pref-pill-icon">{opt.icon}</span>
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Save button (shown when both selected) */}
+      <AnimatePresence>
+        {timing && timeSlot && (
+          <motion.button
+            className="ty-pref-save-btn"
+            onClick={handleSave}
+            disabled={saving}
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 8 }}
+            transition={{ duration: 0.2 }}
+          >
+            {saving ? 'Saving…' : 'Save My Preference →'}
+          </motion.button>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+// ── Main page ─────────────────────────────────────────────────────────────────
+
 function LeadThankYouContent() {
   const params    = useSearchParams();
-  const firstName = params.get('name') ?? 'there';
-  const state     = params.get('state') ?? 'your state';
+  const firstName = params.get('name')   ?? 'there';
+  const state     = params.get('state')  ?? 'your state';
+  const leadId    = params.get('leadId') ?? '';
 
   return (
     <div className="ty-page">
@@ -82,6 +202,13 @@ function LeadThankYouContent() {
             </li>
           </ol>
         </motion.div>
+
+        {/* Contact preference */}
+        {leadId && (
+          <motion.div variants={fadeUp}>
+            <ContactPreference leadId={leadId} />
+          </motion.div>
+        )}
 
         {/* Sam quote */}
         <motion.blockquote variants={fadeUp} className="ty-quote">
