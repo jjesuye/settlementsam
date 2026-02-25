@@ -15,6 +15,15 @@ const config = {
   appId:             process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
 };
 
-const app = getApps().length === 0 ? initializeApp(config) : getApps()[0];
-export const clientApp = app;
-export const db = getFirestore(app);
+// Singleton — never initialize twice
+export const clientApp = getApps().length ? getApps()[0] : initializeApp(config);
+export const db = getFirestore(clientApp);
+
+// Temporary config check — remove after confirming SMS works in production
+if (typeof window !== 'undefined') {
+  console.log('Firebase config check:', {
+    apiKey:    config.apiKey    ? 'SET' : 'MISSING',
+    authDomain: config.authDomain ? 'SET' : 'MISSING',
+    projectId: config.projectId ? 'SET' : 'MISSING',
+  });
+}

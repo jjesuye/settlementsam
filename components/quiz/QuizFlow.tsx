@@ -13,10 +13,11 @@
  *   'disqualified'  — hard exit when atFault = true
  */
 
-import React, { useCallback, useReducer, useState, useMemo, useEffect, useRef } from 'react';
+import React, { useCallback, useReducer, useState, useMemo, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { getAuth } from 'firebase/auth';
 import { QUIZ_QUESTIONS, US_STATES } from '@/lib/quiz/questions';
 import type { QuizQuestion, QuizOption } from '@/lib/quiz/questions';
 import {
@@ -29,20 +30,9 @@ import {
 import type { QuizAnswers, DisqualReason } from '@/lib/quiz/types';
 import { INITIAL_ANSWERS } from '@/lib/quiz/types';
 import { formatCurrency, LOST_WAGES_MAX } from '@/lib/estimator/logic';
-import {
-  sendSMSCode,
-  verifySMSCode,
-} from '@/lib/firebase/phone-auth';
 import { validateEmailFormat } from '@/lib/validate-email';
-
-// ── Phone formatter ────────────────────────────────────────────────────────────
-
-function formatPhone(raw: string): string {
-  const d = raw.replace(/\D/g, '').slice(0, 10);
-  if (d.length <= 3)  return d;
-  if (d.length <= 6)  return `(${d.slice(0, 3)}) ${d.slice(3)}`;
-  return `(${d.slice(0, 3)}) ${d.slice(3, 6)}-${d.slice(6)}`;
-}
+import { clientApp } from '@/lib/firebase/client';
+import SMSVerification from '@/components/SMSVerification';
 
 // ── Reducer ───────────────────────────────────────────────────────────────────
 
@@ -67,63 +57,7 @@ const slideVariants = {
 };
 const springTransition = { type: 'spring' as const, stiffness: 320, damping: 30 };
 
-// ── 6-digit code input ────────────────────────────────────────────────────────
 
-const CODE_LENGTH = 6;
-
-function SqCodeInput({ value, onChange }: { value: string; onChange: (v: string) => void }) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const slots = value.padEnd(CODE_LENGTH, ' ').split('').slice(0, CODE_LENGTH);
-
-  const focusAt = (i: number) => {
-    const els = containerRef.current?.querySelectorAll<HTMLInputElement>('.sq-code-digit');
-    els?.[i]?.focus();
-  };
-
-  const handleChange = (i: number, char: string) => {
-    const digit = char.replace(/\D/g, '').slice(-1);
-    const next  = slots.map((s, idx) => (idx === i ? (digit || ' ') : s));
-    onChange(next.join('').trimEnd());
-    if (digit && i < CODE_LENGTH - 1) focusAt(i + 1);
-  };
-
-  const handleKeyDown = (i: number, e: React.KeyboardEvent) => {
-    if (e.key === 'Backspace') {
-      if (slots[i].trim()) {
-        const next = slots.map((s, idx) => (idx === i ? ' ' : s));
-        onChange(next.join('').trimEnd());
-      } else if (i > 0) {
-        focusAt(i - 1);
-      }
-    } else if (e.key === 'ArrowLeft'  && i > 0)              focusAt(i - 1);
-      else if (e.key === 'ArrowRight' && i < CODE_LENGTH - 1) focusAt(i + 1);
-  };
-
-  const handlePaste = (e: React.ClipboardEvent) => {
-    const pasted = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, CODE_LENGTH);
-    if (pasted) { onChange(pasted); focusAt(Math.min(pasted.length, CODE_LENGTH - 1)); }
-    e.preventDefault();
-  };
-
-  return (
-    <div ref={containerRef} className="sq-code-input" onPaste={handlePaste}>
-      {Array.from({ length: CODE_LENGTH }, (_, i) => (
-        <input
-          key={i}
-          className={`sq-code-digit${slots[i].trim() ? ' sq-code-digit--filled' : ''}`}
-          type="tel"
-          inputMode="numeric"
-          maxLength={1}
-          value={slots[i].trim()}
-          onChange={e => handleChange(i, e.target.value)}
-          onKeyDown={e => handleKeyDown(i, e)}
-          autoFocus={i === 0}
-          aria-label={`Code digit ${i + 1}`}
-        />
-      ))}
-    </div>
-  );
-}
 
 // ── Alert box ─────────────────────────────────────────────────────────────────
 
@@ -145,7 +79,7 @@ function AlertBox({ type, msg }: { type: 'warning' | 'tip' | 'success'; msg: str
 
 // ── Screen type ───────────────────────────────────────────────────────────────
 
-type Screen = 'quiz' | 'contact' | 'verify' | 'success' | 'attorney_exit' | 'disqualified';
+type Screen = 'quiz' | 'contact' | 'sms' | 'success' | 'attorney_exit' | 'disqualified';
 
 // ── Main component ────────────────────────────────────────────────────────────
 
@@ -160,38 +94,21 @@ export function QuizFlow() {
   const [alert, setAlert]         = useState<{ type: 'warning' | 'tip' | 'success'; msg: string } | null>(null);
 
   // Contact form
-  const [firstName,   setFirstName]  = useState('');
-  const [lastName,    setLastName]   = useState('');
-  const [phone,       setPhone]      = useState('');
-  const [email,       setEmail]      = useState('');
-  const [emailError,  setEmailError] = useState('');
-  const [formError,   setFormError]  = useState('');
+  const [firstName,  setFirstName] = useState('');
+  const [lastName,   setLastName]  = useState('');
+  const [email,      setEmail]     = useState('');
+  const [emailError, setEmailError] = useState('');
+  const [formError,  setFormError]  = useState('');
 
-  // Verify
-  const [code,        setCode]        = useState('');
-  const [loading,     setLoading]     = useState(false);
-  const [verifyError, setVerifyError] = useState('');
-  const [cooldown,    setCooldown]    = useState(0);
-  const [resendCount, setResendCount] = useState(0);
-  const [codeAttempts, setCodeAttempts] = useState(0);
-
-  const MAX_RESENDS       = 3;
-  const MAX_CODE_ATTEMPTS = 5;
+  // Post-SMS API state
+  const [loading,    setLoading]    = useState(false);
+  const [smsError,   setSmsError]   = useState('');
 
   const totalQuestions = QUIZ_QUESTIONS.length;
   const currentQ = QUIZ_QUESTIONS[stepPos] ?? QUIZ_QUESTIONS[0];
   const progressPct = (stepPos / totalQuestions) * 100;
 
   const estimate = useMemo(() => calculateQuizEstimate(answers as QuizAnswers), [answers]);
-
-  // Cooldown ticker
-  useEffect(() => {
-    if (cooldown <= 0) return;
-    const t = setTimeout(() => setCooldown(c => c - 1), 1_000);
-    return () => clearTimeout(t);
-  }, [cooldown]);
-
-  const formatCooldown = (s: number) => `0:${String(s).padStart(2, '0')}`;
 
   const setAnswer = useCallback((key: keyof QuizAnswers, value: unknown) => {
     dispatch({ type: 'SET_ANSWER', key, value });
@@ -223,10 +140,9 @@ export function QuizFlow() {
     setScreen('quiz');
     setDisqReason(null);
     setAlert(null);
-    setFirstName(''); setLastName(''); setPhone('');
-    setEmail(''); setFormError('');
-    setCode(''); setVerifyError(''); setCooldown(0);
-    setResendCount(0); setCodeAttempts(0); setEmailError('');
+    setFirstName(''); setLastName('');
+    setEmail(''); setFormError(''); setEmailError('');
+    setSmsError('');
   }, []);
 
   /** Parse string option value to typed value */
@@ -266,85 +182,41 @@ export function QuizFlow() {
     }
   };
 
-  // ── Send Firebase OTP (from contact form) ──────────────────────────────────
+  // ── Validate contact form and proceed to SMS ───────────────────────────────
 
-  const handleSendCode = async (isResend = false) => {
-    if (isResend && resendCount >= MAX_RESENDS) {
-      setVerifyError('Too many attempts. Please refresh the page and try again.');
-      return;
-    }
+  const handleContactNext = () => {
+    if (!firstName.trim()) return setFormError('Please enter your first name.');
+    if (!lastName.trim())  return setFormError('Please enter your last name.');
+    const emailErr = validateEmailFormat(email);
+    if (emailErr)          return setFormError(emailErr);
     setFormError('');
-    setVerifyError('');
-
-    if (!isResend) {
-      // Validate contact form fields
-      const cleanPhone = phone.replace(/\D/g, '');
-      if (!firstName.trim())            return setFormError('Please enter your first name.');
-      if (!lastName.trim())             return setFormError('Please enter your last name.');
-      if (cleanPhone.length !== 10)     return setFormError('Please enter a valid 10-digit phone number.');
-      const emailErr = validateEmailFormat(email);
-      if (emailErr)                     return setFormError(emailErr);
-    }
-
-    setLoading(true);
-    const result = await sendSMSCode(phone);
-    setLoading(false);
-
-    if (!result.success) {
-      if (isResend) setVerifyError(result.error ?? 'Failed to send code.');
-      else          setFormError(result.error ?? 'Failed to send code.');
-      return;
-    }
-
-    if (!isResend) setScreen('verify');
-    setCooldown(60);
-    if (isResend) setResendCount(r => r + 1);
+    setScreen('sms');
   };
 
-  // ── Verify OTP + save lead ──────────────────────────────────────────────────
+  // ── Called by SMSVerification after phone is verified ──────────────────────
 
-  const handleVerifyCode = async () => {
-    if (codeAttempts >= MAX_CODE_ATTEMPTS) {
-      setVerifyError('Too many wrong attempts. Request a new code.');
-      return;
-    }
-    setVerifyError('');
+  const handleSmsVerified = async (phoneNumber: string) => {
     setLoading(true);
-
-    const score = calculateScore(answers as QuizAnswers);
-    const tier  = scoreTier(score);
-    const est   = estimate;
-
-    let injuryType = 'soft_tissue';
-    if (answers.hasSurgery)        injuryType = 'spinal';
-    else if (answers.hospitalized) injuryType = 'fracture';
-
-    const smsResult = await verifySMSCode(code);
-
-    if (!smsResult.success) {
-      const msg = smsResult.error ?? 'Verification failed. Please try again.';
-      if (msg.includes('incorrect') || msg.includes("didn't match")) {
-        const newAttempts = codeAttempts + 1;
-        setCodeAttempts(newAttempts);
-        const left = MAX_CODE_ATTEMPTS - newAttempts;
-        setVerifyError(
-          left > 0
-            ? `${msg} ${left} attempt${left !== 1 ? 's' : ''} remaining.`
-            : 'No attempts left. Request a new code.',
-        );
-      } else {
-        setVerifyError(msg);
-      }
-      setLoading(false);
-      return;
-    }
+    setSmsError('');
 
     try {
+      const auth    = getAuth(clientApp);
+      const idToken = await auth.currentUser?.getIdToken() ?? '';
+
+      const score = calculateScore(answers as QuizAnswers);
+      const tier  = scoreTier(score);
+      const est   = estimate;
+
+      let injuryType = 'soft_tissue';
+      if (answers.hasSurgery)        injuryType = 'spinal';
+      else if (answers.hospitalized) injuryType = 'fracture';
+
       const body: Record<string, unknown> = {
         ...answers,
-        idToken:      smsResult.idToken,
+        idToken,
         name:         `${firstName.trim()} ${lastName.trim()}`,
         email:        email.trim(),
+        phone:        phoneNumber,
         injuryType,
         surgery:      answers.hasSurgery,
         estimateLow:  est.low,
@@ -361,7 +233,7 @@ export function QuizFlow() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message ?? 'Verification failed.');
-      // Redirect to lead thank-you page with name, state, and leadId
+
       const params = new URLSearchParams({
         name:   firstName.trim(),
         state:  String(answers.state ?? ''),
@@ -369,8 +241,7 @@ export function QuizFlow() {
       });
       router.push(`/thank-you/lead?${params.toString()}`);
     } catch (err: unknown) {
-      setVerifyError(err instanceof Error ? err.message : 'Something went wrong. Please try again.');
-    } finally {
+      setSmsError(err instanceof Error ? err.message : 'Something went wrong. Please try again.');
       setLoading(false);
     }
   };
@@ -573,13 +444,10 @@ export function QuizFlow() {
   if (screen === 'contact') {
     return (
       <div className="sq-page">
-        {/* Invisible reCAPTCHA anchor */}
-        <div id="recaptcha-container" />
-
         <div className="sq-header">
           <img src="/images/sam-icons/sam-logo.png" className="sq-header-icon" alt="" aria-hidden="true" />
           <div className="sq-progress-bar">
-            <div className="sq-progress-fill" style={{ width: '92%' }} />
+            <div className="sq-progress-fill" style={{ width: '90%' }} />
           </div>
         </div>
 
@@ -590,9 +458,9 @@ export function QuizFlow() {
           transition={{ duration: 0.3 }}
         >
           <div style={{ textAlign: 'center' }}>
-            <h2 className="sq-headline" style={{ marginBottom: 4 }}>One last thing…</h2>
+            <h2 className="sq-headline" style={{ marginBottom: 4 }}>Almost there…</h2>
             <p className="sq-sub" style={{ marginBottom: 0 }}>
-              Where should we send your results? We'll text you a quick verification code.
+              Tell us who to send your results to.
             </p>
           </div>
 
@@ -625,20 +493,6 @@ export function QuizFlow() {
             </div>
 
             <div className="sq-field">
-              <label className="sq-field-label" htmlFor="sq-phone">Mobile Phone</label>
-              <input
-                id="sq-phone"
-                className="sq-text-input"
-                type="tel"
-                placeholder="(555) 867-5309"
-                value={phone}
-                onChange={e => setPhone(formatPhone(e.target.value))}
-                autoComplete="tel"
-                inputMode="tel"
-              />
-            </div>
-
-            <div className="sq-field">
               <label className="sq-field-label" htmlFor="sq-email">Email Address</label>
               <input
                 id="sq-email"
@@ -664,15 +518,10 @@ export function QuizFlow() {
 
             <button
               className="sq-btn-submit"
-              onClick={() => handleSendCode(false)}
-              disabled={loading}
+              onClick={handleContactNext}
             >
-              {loading ? 'Sending your code…' : 'Send Me My Results →'}
+              Continue →
             </button>
-
-            <p className="sq-privacy-note">
-              🔒 Your info is safe. Standard SMS rates may apply.
-            </p>
           </div>
 
           <button className="sq-btn-back-plain" onClick={() => { setDirection(-1); setScreen('quiz'); setStepPos(totalQuestions - 1); }}>
@@ -684,10 +533,9 @@ export function QuizFlow() {
   }
 
   // ══════════════════════════════════════════════════════════════════════════
-  // SCREEN: VERIFY
+  // SCREEN: SMS VERIFICATION
   // ══════════════════════════════════════════════════════════════════════════
-  if (screen === 'verify') {
-    const canVerify = code.replace(/\s/g, '').length === CODE_LENGTH;
+  if (screen === 'sms') {
     return (
       <div className="sq-page">
         <div className="sq-header">
@@ -703,52 +551,26 @@ export function QuizFlow() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.3 }}
         >
-          <div className="sq-verify-screen">
-
-            <div>
-              <h2 className="sq-headline" style={{ marginBottom: 6 }}>Check your texts!</h2>
-              <p className="sq-sub" style={{ marginBottom: 0 }}>
-                We sent a 6-digit code to <strong>{phone}</strong>.
-              </p>
+          {loading ? (
+            <div style={{ textAlign: 'center', padding: '32px 0', color: 'var(--ss-muted)' }}>
+              Saving your results…
             </div>
-
-            <SqCodeInput value={code} onChange={setCode} />
-
-            {verifyError && (
-              <p className="sq-form-error" role="alert" style={{ width: '100%', textAlign: 'center' }}>
-                {verifyError}
-              </p>
-            )}
-
-            <button
-              className="sq-btn-submit"
-              onClick={handleVerifyCode}
-              disabled={!canVerify || loading}
-              style={{ width: '100%' }}
-            >
-              {loading ? 'Unlocking…' : 'Unlock My Results →'}
-            </button>
-
-            {resendCount < MAX_RESENDS ? (
-              <button
-                className="sq-resend-btn"
-                onClick={() => handleSendCode(true)}
-                disabled={cooldown > 0 || loading}
-              >
-                {cooldown > 0
-                  ? `Resend code in ${formatCooldown(cooldown)}`
-                  : "Didn't get it? Resend →"}
-              </button>
-            ) : (
-              <p className="sq-resend-btn" style={{ cursor: 'default', opacity: 0.5 }}>
-                Too many attempts. Please try again later.
-              </p>
-            )}
-
+          ) : smsError ? (
+            <div style={{ textAlign: 'center', padding: '16px 0' }}>
+              <p style={{ color: '#EF4444', marginBottom: 16 }}>{smsError}</p>
+              <button className="sq-btn-back-plain" onClick={() => setSmsError('')}>Try again</button>
+            </div>
+          ) : (
+            <SMSVerification
+              leadName={firstName}
+              onVerified={handleSmsVerified}
+            />
+          )}
+          {!loading && !smsError && (
             <button className="sq-btn-back-plain" onClick={() => setScreen('contact')}>
-              ← Change my number
+              ← Back
             </button>
-          </div>
+          )}
         </motion.div>
       </div>
     );
