@@ -298,26 +298,26 @@ export default function LandingPage() {
             <div className="sl-attorneys-copy">
               <h2>Are You a Personal Injury Attorney?</h2>
               <p>
-                Settlement Sam pre-screens and scores every lead so your intake team
-                only talks to HOT prospects. Start with 25 leads for $250 each.
+                Settlement Sam pre-screens every claimant so your intake team
+                only speaks with qualified, SMS-verified prospects.
                 No contracts. Cancel anytime.
               </p>
               <Link href="/attorneys" className="sl-btn-primary">
-                See Attorney Plans →
+                See How It Works →
               </Link>
             </div>
             <div className="sl-attorneys-badges">
               <div className="sl-badge-card">
-                <span className="sl-badge-val">HOT</span>
-                <span className="sl-badge-desc">Score ≥ 85/150</span>
+                <span className="sl-badge-val">✓</span>
+                <span className="sl-badge-desc">SMS Verified</span>
               </div>
               <div className="sl-badge-card sl-badge-warm">
-                <span className="sl-badge-val">WARM</span>
-                <span className="sl-badge-desc">Score 45–84</span>
+                <span className="sl-badge-val">📋</span>
+                <span className="sl-badge-desc">Full Injury Profile</span>
               </div>
               <div className="sl-badge-card sl-badge-cold">
-                <span className="sl-badge-val">COLD</span>
-                <span className="sl-badge-desc">Score &lt; 45</span>
+                <span className="sl-badge-val">⚡</span>
+                <span className="sl-badge-desc">Instant Delivery</span>
               </div>
             </div>
           </motion.div>

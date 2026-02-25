@@ -198,5 +198,5 @@ export async function POST(req: NextRequest) {
     `${String(name ?? '').trim()} (${phone}) score=${score} tier=${tier}`,
   );
 
-  return NextResponse.json({ success: true, token, score, tier });
+  return NextResponse.json({ success: true, token });
 }
