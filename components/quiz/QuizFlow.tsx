@@ -16,6 +16,7 @@
 import React, { useCallback, useReducer, useState, useMemo, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { QUIZ_QUESTIONS, US_STATES } from '@/lib/quiz/questions';
 import type { QuizQuestion, QuizOption } from '@/lib/quiz/questions';
 import {
@@ -150,6 +151,7 @@ type Screen = 'quiz' | 'contact' | 'verify' | 'success' | 'attorney_exit' | 'dis
 // ── Main component ────────────────────────────────────────────────────────────
 
 export function QuizFlow() {
+  const router = useRouter();
   const [answers,    dispatch]    = useReducer(quizReducer, INITIAL_ANSWERS);
   const [stepPos,    setStepPos]  = useState(0);
   const [direction,  setDirection] = useState(1);
@@ -342,7 +344,12 @@ export function QuizFlow() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message ?? 'Verification failed.');
-      setScreen('success');
+      // Redirect to lead thank-you page with name and state
+      const params = new URLSearchParams({
+        name: firstName.trim(),
+        state: String(answers.state ?? ''),
+      });
+      router.push(`/thank-you/lead?${params.toString()}`);
     } catch (err: unknown) {
       const fbMsg = mapFirebaseAuthError(err);
       if (fbMsg.includes("didn't match")) {

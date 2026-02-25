@@ -10,6 +10,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { validateEmailFormat } from '@/lib/validate-email';
 import { US_STATES } from '@/lib/quiz/questions';
@@ -186,6 +187,7 @@ function PricingSection({ name, state }: { name: string; state: string }) {
 type GateState = 'idle' | 'submitting' | 'error';
 
 function PricingGate({ onUnlock }: { onUnlock: (name: string, state: string) => void }) {
+  const router       = useRouter();
   const [gateState,   setGateState]   = useState<GateState>('idle');
   const [name,        setName]        = useState('');
   const [firm,        setFirm]        = useState('');
@@ -200,7 +202,6 @@ function PricingGate({ onUnlock }: { onUnlock: (name: string, state: string) => 
     e.preventDefault();
     setFormError('');
 
-    // Client-side email format check
     const emailErr = validateEmailFormat(email);
     if (emailErr) { setEmailError(emailErr); return; }
     setEmailError('');
@@ -221,7 +222,11 @@ function PricingGate({ onUnlock }: { onUnlock: (name: string, state: string) => 
         }
         throw new Error(data.message ?? 'Submission failed.');
       }
-      onUnlock(name, state);
+      // Redirect to attorney thank-you page with context
+      const params = new URLSearchParams({
+        name, firm, email, phone, state, case_volume: caseVolume,
+      });
+      router.push(`/thank-you/attorney?${params.toString()}`);
     } catch (err: unknown) {
       setFormError(err instanceof Error ? err.message : 'Something went wrong. Please try again.');
       setGateState('idle');
