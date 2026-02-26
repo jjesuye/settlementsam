@@ -3,8 +3,6 @@ import {
   useCurrentFrame,
   interpolate,
   spring,
-  Audio,
-  staticFile,
   AbsoluteFill,
 } from 'remotion';
 import { StatCard } from '../components/StatCard';
@@ -319,15 +317,12 @@ const Ch5: React.FC<{ frame: number }> = ({ frame }) => {
 export const LoomDemo: React.FC = () => {
   const frame = useCurrentFrame();
 
-  let audioEl: React.ReactNode = null;
-  try { audioEl = <Audio src={staticFile('audio/loom-demo.mp3')} />; } catch { /* no audio */ }
 
   const fade = (s: number, e: number) =>
     interpolate(frame, [s, s + 12, e - 12, e], [0, 1, 1, 0], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
 
   return (
     <AbsoluteFill style={{ background: BG, fontFamily: "'Inter', sans-serif" }}>
-      {audioEl}
       <ProgressBar />
       {frame < C2 + 12 && <div style={{ opacity: fade(C1, C2 + 12), position: 'absolute', inset: 0 }}><Ch1 frame={frame} /></div>}
       {frame >= C2 - 12 && frame < C3 + 12 && <div style={{ opacity: fade(C2, C3 + 12), position: 'absolute', inset: 0 }}><Ch2 frame={frame} /></div>}

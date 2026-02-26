@@ -3,8 +3,6 @@ import {
   useCurrentFrame,
   interpolate,
   spring,
-  Audio,
-  staticFile,
   AbsoluteFill,
 } from 'remotion';
 import { CountUp } from '../components/CountUp';
@@ -297,15 +295,12 @@ const Scene6: React.FC<{ frame: number }> = ({ frame }) => {
 export const FullPitch: React.FC = () => {
   const frame = useCurrentFrame();
 
-  let audioEl: React.ReactNode = null;
-  try { audioEl = <Audio src={staticFile('audio/full-pitch.mp3')} />; } catch { /* no audio */ }
 
   const fade = (s: number, e: number) =>
     interpolate(frame, [s, s + 10, e - 10, e], [0, 1, 1, 0], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
 
   return (
     <AbsoluteFill style={{ background: BG, fontFamily: "'Inter', sans-serif" }}>
-      {audioEl}
       <ProgressBar />
       {frame < S2 + 10 && <div style={{ opacity: fade(S1, S2 + 10), position: 'absolute', inset: 0 }}><Scene1 frame={frame} /></div>}
       {frame >= S2 - 10 && frame < S3 + 10 && <div style={{ opacity: fade(S2, S3 + 10), position: 'absolute', inset: 0 }}><Scene2 frame={frame} /></div>}
