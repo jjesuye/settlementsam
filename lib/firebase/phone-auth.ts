@@ -2,7 +2,7 @@
 /**
  * lib/firebase/phone-auth.ts
  * Firebase Phone Authentication — client-side only.
- * Module-level state persists across renders; reCAPTCHA attaches to the button.
+ * reCAPTCHA attaches to a persistent hidden <div id="recaptcha-container"> (not a button).
  */
 
 import {
@@ -24,9 +24,15 @@ export function destroyRecaptcha() {
   }
 }
 
-/** Call this ONCE after the send-code button exists in the DOM. */
-export function initRecaptcha(buttonId: string): void {
+/** Call this ONCE after <div id="recaptcha-container"> exists in the DOM. */
+export function initRecaptcha(): void {
   if (typeof window === 'undefined') return;
+
+  const container = document.getElementById('recaptcha-container');
+  if (!container) {
+    console.error('[phone-auth] initRecaptcha: #recaptcha-container div not found in DOM');
+    return;
+  }
 
   // Always destroy existing before creating new
   destroyRecaptcha();
@@ -35,28 +41,31 @@ export function initRecaptcha(buttonId: string): void {
 
   recaptchaVerifier = new RecaptchaVerifier(
     auth,
-    buttonId,
+    'recaptcha-container',
     {
       size: 'invisible',
       callback: () => {
-        console.log('reCAPTCHA solved');
+        console.log('[phone-auth] reCAPTCHA solved');
       },
       'expired-callback': () => {
-        console.log('reCAPTCHA expired — will reinitialize on next attempt');
+        console.log('[phone-auth] reCAPTCHA expired — will reinitialize on next attempt');
         destroyRecaptcha();
       },
     },
   );
 
   // Pre-render so it's ready when the user clicks
-  recaptchaVerifier.render().catch((err) => {
-    console.error('reCAPTCHA render error:', err);
-  });
+  recaptchaVerifier.render()
+    .then((widgetId) => {
+      console.log('[phone-auth] reCAPTCHA rendered, widgetId:', widgetId);
+    })
+    .catch((err) => {
+      console.error('[phone-auth] reCAPTCHA render error:', err);
+    });
 }
 
 export async function sendVerificationCode(
   phoneNumber: string,
-  buttonId: string,
 ): Promise<{ success: boolean; error?: string }> {
   if (typeof window === 'undefined') {
     return { success: false, error: 'Cannot send SMS on server' };
@@ -79,37 +88,51 @@ export async function sendVerificationCode(
 
     // Initialize fresh verifier if needed
     if (!recaptchaVerifier) {
-      initRecaptcha(buttonId);
+      initRecaptcha();
+      // Give it a moment to render
+      await new Promise(resolve => setTimeout(resolve, 300));
     }
 
-    console.log('Sending SMS to:', e164);
+    if (!recaptchaVerifier) {
+      return { success: false, error: 'reCAPTCHA not ready. Please refresh the page.' };
+    }
 
-    confirmationResult = await signInWithPhoneNumber(auth, e164, recaptchaVerifier!);
+    console.log('[phone-auth] Sending SMS to:', e164);
 
-    console.log('SMS sent successfully');
+    confirmationResult = await signInWithPhoneNumber(auth, e164, recaptchaVerifier);
+
+    console.log('[phone-auth] SMS sent successfully');
     return { success: true };
 
-  } catch (err: any) {
-    console.error('SMS send error:', err.code, err.message);
+  } catch (err: unknown) {
+    // Full error logging to diagnose undefined error codes
+    console.error('[phone-auth] SMS send error — full dump:', JSON.stringify(err, Object.getOwnPropertyNames(err)));
+    const e = err as Record<string, unknown>;
+    console.error('[phone-auth] err.code:', e?.code);
+    console.error('[phone-auth] err.message:', e?.message);
+    console.error('[phone-auth] err.name:', e?.name);
+    console.error('[phone-auth] err.stack:', e?.stack);
 
     // Always destroy and recreate verifier after any error
     destroyRecaptcha();
 
     const errorMessages: Record<string, string> = {
-      'auth/invalid-phone-number':    'Please enter a valid US phone number.',
-      'auth/too-many-requests':       'Too many attempts. Please wait 15 minutes.',
-      'auth/quota-exceeded':          'SMS service temporarily unavailable. Try again in a few minutes.',
-      'auth/captcha-check-failed':    'Security check failed. Please refresh the page and try again.',
-      'auth/missing-phone-number':    'Please enter your phone number.',
-      'auth/user-disabled':           'This phone number has been disabled.',
-      'auth/operation-not-allowed':   'Phone sign-in is not enabled. Please contact support.',
-      'auth/network-request-failed':  'Network error. Please check your connection and try again.',
+      'auth/invalid-phone-number':   'Please enter a valid US phone number.',
+      'auth/too-many-requests':      'Too many attempts. Please wait 15 minutes.',
+      'auth/quota-exceeded':         'SMS service temporarily unavailable. Try again in a few minutes.',
+      'auth/captcha-check-failed':   'Security check failed. Please refresh the page and try again.',
+      'auth/missing-phone-number':   'Please enter your phone number.',
+      'auth/user-disabled':          'This phone number has been disabled.',
+      'auth/operation-not-allowed':  'Phone sign-in is not enabled. Please contact support.',
+      'auth/network-request-failed': 'Network error. Please check your connection and try again.',
     };
 
-    return {
-      success: false,
-      error: errorMessages[err.code] ?? `Verification failed (${err.code}). Please try again.`,
-    };
+    const code = typeof e?.code === 'string' ? e.code : '';
+    const msg  = typeof e?.message === 'string' ? e.message : '';
+    const friendlyMsg = code ? (errorMessages[code] ?? `Verification failed (${code}). Please try again.`)
+                              : (msg ? `Error: ${msg}` : 'Verification failed. Please refresh and try again.');
+
+    return { success: false, error: friendlyMsg };
   }
 }
 
@@ -126,13 +149,14 @@ export async function confirmVerificationCode(
 
   try {
     const result = await confirmationResult.confirm(code);
-    console.log('Phone verified successfully, user:', result.user.uid);
+    console.log('[phone-auth] Phone verified successfully, user:', result.user.uid);
     const idToken = await result.user.getIdToken();
     confirmationResult = null;
     return { success: true, idToken };
 
-  } catch (err: any) {
-    console.error('Code confirm error:', err.code, err.message);
+  } catch (err: unknown) {
+    const e = err as Record<string, unknown>;
+    console.error('[phone-auth] Code confirm error:', e?.code, e?.message);
 
     const errorMessages: Record<string, string> = {
       'auth/invalid-verification-code': 'Incorrect code. Please check and try again.',
@@ -140,9 +164,10 @@ export async function confirmVerificationCode(
       'auth/missing-verification-code': 'Please enter the 6-digit code.',
     };
 
+    const code_ = typeof e?.code === 'string' ? e.code : '';
     return {
       success: false,
-      error: errorMessages[err.code] ?? 'Verification failed. Please try again.',
+      error: code_ ? (errorMessages[code_] ?? 'Verification failed. Please try again.') : 'Verification failed. Please try again.',
     };
   }
 }

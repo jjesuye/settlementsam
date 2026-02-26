@@ -9,11 +9,16 @@
  */
 
 import { useState } from 'react';
+import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { validateEmailFormat } from '@/lib/validate-email';
 import { US_STATES } from '@/lib/quiz/questions';
+import { FullPitch } from '@/remotion/videos/FullPitch';
+
+// Player is client-only — lazy load to avoid SSR issues
+const Player = dynamic(() => import('@remotion/player').then(m => m.Player), { ssr: false });
 
 // ── Animation presets ─────────────────────────────────────────────────────────
 
@@ -525,6 +530,31 @@ export default function AttorneysPage() {
               </motion.div>
             </motion.div>
           </div>
+        </div>
+      </section>
+
+      {/* ── PITCH VIDEO ─────────────────────────────────────────────────────── */}
+      <section className="section" id="video" style={{ background: '#0A1628', padding: '60px 0' }}>
+        <div className="container" style={{ maxWidth: 960 }}>
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.5 }}
+          >
+            <Player
+              component={FullPitch}
+              durationInFrames={2700}
+              fps={30}
+              compositionWidth={1920}
+              compositionHeight={1080}
+              style={{ width: '100%', borderRadius: 16, overflow: 'hidden' }}
+              controls
+              autoPlay
+              loop={false}
+              initiallyMuted
+            />
+          </motion.div>
         </div>
       </section>
 
