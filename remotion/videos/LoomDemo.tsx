@@ -10,184 +10,312 @@ import {
 import { StatCard } from '../components/StatCard';
 import { PhoneMockup } from '../components/PhoneMockup';
 import { ProgressBar } from '../components/ProgressBar';
-import { AnimatedText } from '../components/AnimatedText';
 
-const BG = '#0A1628';
-const GREEN = '#00E676';
-const AMBER = '#E8A838';
-const FPS = 30;
+const BG     = '#0A1628';
+const AMBER  = '#E8A838';
+const FOREST = '#4A7C59';
+const FPS    = 30;
 
-// Chapter boundaries (frames)
+// Chapter boundaries
 const C1 = 0;
 const C2 = 45  * FPS;
 const C3 = 120 * FPS;
 const C4 = 180 * FPS;
 const C5 = 240 * FPS;
-const TOTAL = 300 * FPS; // 5 minutes
+const TOTAL = 300 * FPS;
 
-function sp(frame: number, delay: number = 0) {
-  return spring({ frame: frame - delay, fps: FPS, config: { damping: 14, stiffness: 100 }, durationInFrames: 22 });
+function sp(frame: number, delay: number = 0, stiffness = 280) {
+  return spring({ frame: frame - delay, fps: FPS, config: { stiffness, damping: 18 }, durationInFrames: 22 });
 }
 
-function ChapterLabel({ number, title, frame }: { number: string; title: string; frame: number }) {
-  const p = sp(frame, 0);
+// ── Quiz data — defined OUTSIDE components to avoid null issues ───────────────
+const QUIZ_QUESTIONS = [
+  { q: 'What type of injury?', a: 'Auto accident injury' },
+  { q: 'Were you at fault?', a: 'Not at fault' },
+  { q: 'Did you have surgery?', a: 'Yes — spinal surgery' },
+  { q: 'Were you hospitalized?', a: 'Yes, 3+ days' },
+];
+
+const LEAD_PROFILE = [
+  { label: 'Name', value: 'Sarah M. (anonymized)' },
+  { label: 'Injury', value: 'Spinal injury' },
+  { label: 'Surgery', value: 'Yes — confirmed' },
+  { label: 'Hospitalized', value: 'Yes, 3+ days' },
+  { label: 'Lost wages', value: '$15,000+' },
+  { label: 'Insurance contacted', value: 'Yes' },
+  { label: 'SMS Verified', value: '✓ Confirmed' },
+  { label: 'Estimated case value', value: '$75,000 – $200,000' },
+];
+
+// ── Chapter title card ────────────────────────────────────────────────────────
+const ChapterCard: React.FC<{ number: string; title: string; frame: number }> = ({ number, title, frame }) => {
+  const p = sp(frame, 0, 350);
   return (
-    <div style={{ position: 'absolute', top: 40, left: 60, opacity: p, transform: `translateX(${(1-p)*-20}px)` }}>
-      <div style={{ color: GREEN, fontSize: 13, fontWeight: 600, letterSpacing: '0.12em', textTransform: 'uppercase' }}>Chapter {number}</div>
-      <div style={{ color: '#FFFFFF', fontSize: 22, fontWeight: 700 }}>{title}</div>
+    <div style={{ position: 'absolute', top: 36, left: 56, opacity: Math.min(1, p * 1.5), transform: `translateX(${(1 - p) * -30}px)` }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <div style={{ width: 3, height: 36, background: AMBER, borderRadius: 2 }} />
+        <div>
+          <div style={{ color: AMBER, fontSize: 12, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase' }}>
+            Chapter {number}
+          </div>
+          <div style={{ color: '#FFFFFF', fontSize: 20, fontWeight: 700 }}>{title}</div>
+        </div>
+      </div>
     </div>
   );
-}
+};
 
-function PainSlides({ frame }: { frame: number }) {
+// ── Typewriter effect ─────────────────────────────────────────────────────────
+const TypewriterText: React.FC<{ text: string; frame: number; delay: number; style?: React.CSSProperties }> = ({ text, frame, delay, style }) => {
+  const charsVisible = Math.max(0, Math.floor((frame - delay) * 2.5));
+  return (
+    <span style={style}>
+      {text.slice(0, charsVisible)}
+      {charsVisible < text.length && charsVisible >= 0 && (
+        <span style={{ opacity: Math.sin(frame * 0.3) > 0 ? 1 : 0, color: AMBER }}>|</span>
+      )}
+    </span>
+  );
+};
+
+// ── VERIFIED stamp ────────────────────────────────────────────────────────────
+const VerifiedStamp: React.FC<{ frame: number; delay: number }> = ({ frame, delay }) => {
+  const p = spring({ frame: frame - delay, fps: FPS, config: { stiffness: 500, damping: 14 }, durationInFrames: 18 });
+  const rotation = interpolate(p, [0, 1], [45, 0], { extrapolateRight: 'clamp' });
+
+  return (
+    <div style={{
+      position: 'absolute', top: '50%', left: '50%',
+      transform: `translate(-50%, -50%) rotate(${rotation}deg) scale(${p})`,
+      opacity: p,
+      border: `4px solid ${FOREST}`, borderRadius: 10,
+      padding: '14px 28px', background: 'rgba(10,22,40,0.85)',
+      color: FOREST, fontSize: 32, fontWeight: 900,
+      letterSpacing: '0.08em', textTransform: 'uppercase',
+      textAlign: 'center', whiteSpace: 'nowrap',
+      boxShadow: `0 0 30px rgba(74,124,89,0.4)`,
+    }}>
+      VERIFIED ✓
+    </div>
+  );
+};
+
+// ── Quiz screen component ─────────────────────────────────────────────────────
+const QuizScreen: React.FC<{ step: number }> = ({ step }) => {
+  if (!QUIZ_QUESTIONS || QUIZ_QUESTIONS.length === 0) return null;
+  const safeStep = Math.max(0, Math.min(step, QUIZ_QUESTIONS.length - 1));
+  const s = QUIZ_QUESTIONS[safeStep] ?? QUIZ_QUESTIONS[0];
+  if (!s) return null;
+
+  const progressPct = ((safeStep + 1) / QUIZ_QUESTIONS.length) * 100;
+
+  return (
+    <div style={{ width: '100%', padding: 16, fontFamily: "'Inter', sans-serif" }}>
+      <div style={{ color: AMBER, fontSize: 11, fontWeight: 700, textAlign: 'center', marginBottom: 10, letterSpacing: '0.1em' }}>
+        SETTLEMENT SAM
+      </div>
+      <div style={{ color: '#FFFFFF', fontSize: 13, fontWeight: 600, textAlign: 'center', marginBottom: 14, lineHeight: 1.4 }}>
+        {s.q}
+      </div>
+      <div style={{ background: FOREST, color: '#FFFFFF', padding: '10px 14px', borderRadius: 8, textAlign: 'center', fontSize: 12, fontWeight: 700, marginBottom: 12 }}>
+        {s.a} ✓
+      </div>
+      <div style={{ background: 'rgba(255,255,255,0.08)', height: 4, borderRadius: 2 }}>
+        <div style={{ height: '100%', width: `${progressPct}%`, background: AMBER, borderRadius: 2 }} />
+      </div>
+      <div style={{ color: '#9CA3AF', fontSize: 10, textAlign: 'center', marginTop: 6 }}>
+        {safeStep + 1} of {QUIZ_QUESTIONS.length} questions
+      </div>
+    </div>
+  );
+};
+
+// ── Chapter 1: The Problem ────────────────────────────────────────────────────
+const PAIN_POINTS = [
+  'Your intake team is wasting hours on unqualified callers.',
+  'Shared leads mean 5 firms calling the same person.',
+  "You're paying for clicks, not cases.",
+];
+
+const Ch1: React.FC<{ frame: number }> = ({ frame }) => {
   const lf = frame - C1;
-  const points = [
-    'Your intake team is wasting hours on unqualified callers',
-    'Shared leads mean 5 firms calling the same person',
-    "You're paying for clicks, not cases",
-  ];
-  const idx = Math.floor(lf / (15 * FPS));
-  const pointFrame = lf - idx * 15 * FPS;
-  const p = sp(pointFrame, 10);
-  const point = points[Math.min(idx, points.length - 1)];
+  if (!PAIN_POINTS || PAIN_POINTS.length === 0) return null;
+
+  const segDuration = 15 * FPS;
+  const idx = Math.min(PAIN_POINTS.length - 1, Math.max(0, Math.floor(lf / segDuration)));
+  const segFrame = lf - idx * segDuration;
+  const p = sp(segFrame, 12, 350);
+  const point = PAIN_POINTS[idx] ?? PAIN_POINTS[0];
 
   return (
     <AbsoluteFill style={{ alignItems: 'center', justifyContent: 'center' }}>
-      <ChapterLabel number="1" title="The Problem" frame={lf} />
-      <div style={{ color: '#FFFFFF', fontSize: 44, fontWeight: 700, textAlign: 'center', maxWidth: 900, opacity: p, transform: `translateY(${(1-p)*20}px)`, lineHeight: 1.3 }}>
+      <ChapterCard number="1" title="The Problem" frame={lf} />
+      <div style={{
+        color: '#FFFFFF', fontSize: 44, fontWeight: 800, textAlign: 'center',
+        maxWidth: 860, opacity: Math.min(1, p * 1.5), transform: `translateY(${(1 - p) * 30}px)`,
+        lineHeight: 1.35, padding: '0 60px',
+      }}>
         "{point}"
       </div>
     </AbsoluteFill>
   );
-}
+};
 
-function QuizScreen({ step }: { step: number }) {
-  const questions = [
-    { q: 'What type of injury?', a: 'Auto accident injury' },
-    { q: 'Were you at fault?', a: 'Not at fault' },
-    { q: 'Did you have surgery?', a: 'Yes — spinal surgery' },
-    { q: 'Were you hospitalized?', a: 'Yes, 3+ days' },
-  ];
-  const s = questions[Math.min(step, questions.length - 1)];
-  return (
-    <div style={{ width: '100%', padding: 16, fontFamily: "'Inter', sans-serif" }}>
-      <div style={{ color: '#9CA3AF', fontSize: 11, marginBottom: 12, textAlign: 'center' }}>Settlement Sam — Quiz</div>
-      <div style={{ color: '#FFFFFF', fontSize: 13, fontWeight: 600, marginBottom: 12, textAlign: 'center', lineHeight: 1.3 }}>{s.q}</div>
-      <div style={{ background: GREEN, color: '#0A1628', padding: '8px 12px', borderRadius: 8, textAlign: 'center', fontSize: 12, fontWeight: 700 }}>
-        {s.a} ✓
-      </div>
-      <div style={{ marginTop: 10, background: 'rgba(255,255,255,0.05)', height: 4, borderRadius: 2 }}>
-        <div style={{ height: '100%', width: `${((Math.min(step, 3) + 1) / 4) * 100}%`, background: AMBER, borderRadius: 2 }} />
-      </div>
-    </div>
-  );
-}
+// ── Chapter 2: How It Works ───────────────────────────────────────────────────
+const OVERLAY_LINES = [
+  'Every lead answers 12 qualification questions',
+  'SMS verification eliminates fake submissions',
+  'Only verified, qualified leads enter the system',
+];
 
-function HowItWorks({ frame }: { frame: number }) {
+const Ch2: React.FC<{ frame: number }> = ({ frame }) => {
   const lf = frame - C2;
-  const quizStep = Math.min(3, Math.floor(lf / (15 * FPS)));
+  if (!OVERLAY_LINES || OVERLAY_LINES.length === 0) return null;
+
+  const quizStep = Math.min(QUIZ_QUESTIONS.length - 1, Math.max(0, Math.floor(lf / (18 * FPS))));
   const phoneP = sp(lf, 20);
 
-  const overlays = [
-    'Every lead answers 12 qualification questions',
-    'SMS verification eliminates fake submissions',
-    'Only verified, qualified leads enter the system',
-  ];
-  const oIdx = Math.min(2, Math.floor(lf / (25 * FPS)));
-  const oP = sp(lf - oIdx * 25 * FPS, 10);
+  const segDur = 25 * FPS;
+  const oIdx = Math.min(OVERLAY_LINES.length - 1, Math.max(0, Math.floor(lf / segDur)));
+  const oLine = OVERLAY_LINES[oIdx] ?? OVERLAY_LINES[0];
+  const oP = sp(lf - oIdx * segDur, 10, 350);
 
   return (
-    <AbsoluteFill style={{ alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 80 }}>
-      <ChapterLabel number="2" title="How Settlement Sam Works" frame={lf} />
-      <div style={{ opacity: phoneP, transform: `scale(${0.8 + 0.2 * phoneP})` }}>
+    <AbsoluteFill style={{ alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 80, padding: 60 }}>
+      <ChapterCard number="2" title="Inside The Lead Engine" frame={lf} />
+      <div style={{ opacity: Math.min(1, phoneP * 1.5), transform: `scale(${0.75 + 0.25 * phoneP})` }}>
         <PhoneMockup screenContent={<QuizScreen step={quizStep} />} delay={20} />
       </div>
-      <div style={{ maxWidth: 420 }}>
-        <div style={{ color: '#FFFFFF', fontSize: 26, fontWeight: 700, opacity: oP, transform: `translateX(${(1-oP)*30}px)`, lineHeight: 1.4 }}>
-          "{overlays[oIdx]}"
+      <div style={{ maxWidth: 440 }}>
+        <div style={{
+          color: '#FFFFFF', fontSize: 26, fontWeight: 700, lineHeight: 1.45,
+          opacity: Math.min(1, oP * 1.5), transform: `translateX(${(1 - oP) * 40}px)`,
+        }}>
+          "{oLine}"
         </div>
       </div>
     </AbsoluteFill>
   );
-}
+};
 
-function LeadQuality({ frame }: { frame: number }) {
+// ── Chapter 3: Lead Quality ───────────────────────────────────────────────────
+const Ch3: React.FC<{ frame: number }> = ({ frame }) => {
   const lf = frame - C3;
-  const header = sp(lf, 0);
+  if (!LEAD_PROFILE || LEAD_PROFILE.length === 0) return null;
 
-  const profile = [
-    { label: 'Name', value: 'Sarah M. (anonymized)' },
-    { label: 'Injury', value: 'Spinal injury' },
-    { label: 'Surgery', value: 'Yes' },
-    { label: 'Hospitalized', value: 'Yes' },
-    { label: 'Lost wages', value: '$15,000+' },
-    { label: 'Insurance contacted', value: 'Yes' },
-    { label: 'SMS Verified', value: '✓ Confirmed' },
-    { label: 'Estimated case value', value: '$75,000 – $200,000' },
-  ];
+  const header = sp(lf, 0);
+  const stampDelay = LEAD_PROFILE.length * 10 + 20;
 
   return (
     <AbsoluteFill style={{ alignItems: 'center', justifyContent: 'center', flexDirection: 'column', padding: 60 }}>
-      <ChapterLabel number="3" title="Lead Quality" frame={lf} />
-      <div style={{ color: '#FFFFFF', fontSize: 22, fontWeight: 600, marginBottom: 20, opacity: header }}>This is what you receive.</div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, width: '100%', maxWidth: 800 }}>
-        {profile.map((p, i) => (
-          <StatCard key={i} label={p.label} value={p.value} delay={i * 8} accent={p.label === 'SMS Verified' ? GREEN : AMBER} />
-        ))}
+      <ChapterCard number="3" title="Lead Quality" frame={lf} />
+      <div style={{ color: '#FFFFFF', fontSize: 22, fontWeight: 700, marginBottom: 20, marginTop: 60, opacity: Math.min(1, header * 2) }}>
+        This is what you receive.
       </div>
-      <div style={{ color: '#9CA3AF', fontSize: 16, marginTop: 16, opacity: sp(lf, 80) }}>
+      <div style={{ position: 'relative', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, width: '100%', maxWidth: 840 }}>
+        {LEAD_PROFILE.map((item, i) => {
+          const p = sp(lf, i * 10 + 8);
+          const charsVisible = Math.max(0, Math.floor((lf - (i * 10 + 8)) * 3));
+          return (
+            <div key={i} style={{
+              background: '#0F1E35',
+              borderLeft: `4px solid ${item.label === 'SMS Verified' ? FOREST : AMBER}`,
+              borderRadius: 10, padding: '12px 18px',
+              opacity: Math.min(1, p * 1.5), transform: `translateX(${(1 - p) * -30}px)`,
+            }}>
+              <div style={{ color: '#9CA3AF', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 3 }}>{item.label}</div>
+              <div style={{ color: '#FFFFFF', fontSize: 18, fontWeight: 700 }}>
+                {item.value.slice(0, charsVisible)}
+                {charsVisible < item.value.length && charsVisible > 0 && (
+                  <span style={{ opacity: Math.sin(lf * 0.4 + i) > 0 ? 1 : 0, color: AMBER }}>|</span>
+                )}
+              </div>
+            </div>
+          );
+        })}
+        <VerifiedStamp frame={lf} delay={stampDelay} />
+      </div>
+      <div style={{ color: '#9CA3AF', fontSize: 16, marginTop: 20, opacity: sp(lf, stampDelay + 20) }}>
         Not a name and phone number. A full injury profile.
       </div>
     </AbsoluteFill>
   );
-}
+};
 
-function Exclusivity({ frame }: { frame: number }) {
+// ── Chapter 4: Exclusivity ────────────────────────────────────────────────────
+const SPECS = [
+  { label: 'Exclusive Rights', value: '90 Days — your leads only' },
+  { label: 'Replacement Guarantee', value: '100% on disconnects' },
+  { label: 'Delivery', value: 'Real-time to your CRM' },
+];
+
+const Ch4: React.FC<{ frame: number }> = ({ frame }) => {
   const lf = frame - C4;
-  const p = sp(lf, 0);
+  if (!SPECS || SPECS.length === 0) return null;
 
-  const specs = [
-    { label: 'Exclusive Rights', value: '90 Days ✓', accent: GREEN },
-    { label: 'Replacement Guarantee', value: '100% on disconnects ✓', accent: GREEN },
-    { label: 'Delivery', value: 'Real-time to your CRM ✓', accent: GREEN },
-  ];
+  const p = sp(lf, 0, 300);
 
   return (
     <AbsoluteFill style={{ alignItems: 'center', justifyContent: 'center', flexDirection: 'column', padding: 80 }}>
-      <ChapterLabel number="4" title="Exclusivity & Guarantee" frame={lf} />
-      <div style={{ border: `2px solid ${GREEN}`, borderRadius: 20, padding: '32px 48px', opacity: p, transform: `scale(${0.9 + 0.1 * p})`, boxShadow: `0 0 40px rgba(0,230,118,${0.2 * p})` }}>
-        <div style={{ color: '#FFFFFF', fontSize: 24, fontWeight: 700, textAlign: 'center', marginBottom: 20 }}>25-Lead Access Pass</div>
-        {specs.map((s, i) => <StatCard key={i} label={s.label} value={s.value} delay={i * 12} accent={s.accent} />)}
+      <ChapterCard number="4" title="Exclusivity & Guarantee" frame={lf} />
+      <div style={{
+        border: `2px solid rgba(232,168,56,0.4)`, borderRadius: 20,
+        padding: '36px 56px',
+        opacity: Math.min(1, p * 1.5), transform: `scale(${0.88 + 0.12 * p})`,
+        boxShadow: `0 0 48px rgba(232,168,56,0.12)`,
+      }}>
+        <div style={{ color: '#FFFFFF', fontSize: 26, fontWeight: 800, textAlign: 'center', marginBottom: 24 }}>
+          <span style={{ color: AMBER }}>25</span>-Lead Access Pass
+        </div>
+        {SPECS.map((s, i) => (
+          <StatCard key={i} label={s.label} value={s.value} delay={i * 14} accent={FOREST} />
+        ))}
       </div>
-      <div style={{ color: '#9CA3AF', fontSize: 17, textAlign: 'center', maxWidth: 600, marginTop: 24, opacity: sp(lf, 60) }}>
+      <div style={{ color: '#CBD5E1', fontSize: 18, textAlign: 'center', maxWidth: 600, marginTop: 28, opacity: sp(lf, 60) }}>
         No other firm in your geography gets this lead.<br />
-        If a lead doesn't answer, we replace it. No questions.
+        If a lead doesn't answer, we replace it. No questions asked.
       </div>
     </AbsoluteFill>
   );
-}
+};
 
-function Close({ frame }: { frame: number }) {
+// ── Chapter 5: Close ──────────────────────────────────────────────────────────
+const Ch5: React.FC<{ frame: number }> = ({ frame }) => {
   const lf = frame - C5;
   const p1 = sp(lf, 0);
-  const p2 = sp(lf, 20);
-  const p3 = sp(lf, 40);
+  const p2 = sp(lf, 18);
+  const p3 = sp(lf, 36);
+  const pulse = Math.sin(lf * 0.15) * 0.5 + 0.5;
 
   return (
     <AbsoluteFill style={{ alignItems: 'center', justifyContent: 'center', flexDirection: 'column' }}>
-      <ChapterLabel number="5" title="The Close" frame={lf} />
-      <div style={{ textAlign: 'center' }}>
-        <div style={{ color: '#FFFFFF', fontSize: 36, fontWeight: 700, opacity: p1, marginBottom: 8 }}>25-lead minimum. No contracts.</div>
-        <div style={{ color: GREEN, fontSize: 28, fontWeight: 600, opacity: p2, marginBottom: 24 }}>Replace any bad lead.</div>
-        <div style={{ color: GREEN, fontSize: 20, fontWeight: 700, opacity: p3, marginBottom: 12 }}>settlingsam.com/attorneys</div>
-        <div style={{ color: '#FFFFFF', fontSize: 32, fontWeight: 800, opacity: p3, transform: `scale(${0.85 + 0.15*p3})` }}>
-          Settlement Sam
+      <ChapterCard number="5" title="The Close" frame={lf} />
+      <div style={{ textAlign: 'center', padding: '0 80px' }}>
+        <div style={{ color: '#FFFFFF', fontSize: 38, fontWeight: 800, opacity: Math.min(1, p1 * 1.5), marginBottom: 10 }}>
+          25-lead minimum. No contracts.
+        </div>
+        <div style={{ color: AMBER, fontSize: 30, fontWeight: 700, opacity: Math.min(1, p2 * 1.5), marginBottom: 36 }}>
+          Replace any bad lead.
+        </div>
+        <div style={{
+          background: FOREST, color: '#FFFFFF', padding: '18px 52px',
+          borderRadius: 50, fontSize: 22, fontWeight: 800,
+          display: 'inline-block',
+          opacity: Math.min(1, p3 * 1.5), transform: `scale(${0.8 + 0.2 * p3})`,
+          boxShadow: `0 0 ${24 + 16 * pulse}px rgba(74,124,89,${0.45 + 0.25 * pulse})`,
+        }}>
+          settlementsam.com/attorneys
+        </div>
+        <div style={{ color: '#FFFFFF', fontSize: 40, fontWeight: 900, marginTop: 24, opacity: Math.min(1, p3 * 1.5) }}>
+          <span style={{ color: '#FFFFFF' }}>Settlement</span>
+          <span style={{ color: AMBER }}> Sam</span>
         </div>
       </div>
     </AbsoluteFill>
   );
-}
+};
 
+// ── Root ──────────────────────────────────────────────────────────────────────
 export const LoomDemo: React.FC = () => {
   const frame = useCurrentFrame();
 
@@ -195,17 +323,17 @@ export const LoomDemo: React.FC = () => {
   try { audioEl = <Audio src={staticFile('audio/loom-demo.mp3')} />; } catch { /* no audio */ }
 
   const fade = (s: number, e: number) =>
-    interpolate(frame, [s, s + 10, e - 10, e], [0, 1, 1, 0], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
+    interpolate(frame, [s, s + 12, e - 12, e], [0, 1, 1, 0], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
 
   return (
     <AbsoluteFill style={{ background: BG, fontFamily: "'Inter', sans-serif" }}>
       {audioEl}
       <ProgressBar />
-      {frame < C2 + 10 && <div style={{ opacity: fade(C1, C2 + 10), position: 'absolute', inset: 0 }}><PainSlides frame={frame} /></div>}
-      {frame >= C2 - 10 && frame < C3 + 10 && <div style={{ opacity: fade(C2, C3 + 10), position: 'absolute', inset: 0 }}><HowItWorks frame={frame} /></div>}
-      {frame >= C3 - 10 && frame < C4 + 10 && <div style={{ opacity: fade(C3, C4 + 10), position: 'absolute', inset: 0 }}><LeadQuality frame={frame} /></div>}
-      {frame >= C4 - 10 && frame < C5 + 10 && <div style={{ opacity: fade(C4, C5 + 10), position: 'absolute', inset: 0 }}><Exclusivity frame={frame} /></div>}
-      {frame >= C5 - 10 && <div style={{ opacity: fade(C5, TOTAL), position: 'absolute', inset: 0 }}><Close frame={frame} /></div>}
+      {frame < C2 + 12 && <div style={{ opacity: fade(C1, C2 + 12), position: 'absolute', inset: 0 }}><Ch1 frame={frame} /></div>}
+      {frame >= C2 - 12 && frame < C3 + 12 && <div style={{ opacity: fade(C2, C3 + 12), position: 'absolute', inset: 0 }}><Ch2 frame={frame} /></div>}
+      {frame >= C3 - 12 && frame < C4 + 12 && <div style={{ opacity: fade(C3, C4 + 12), position: 'absolute', inset: 0 }}><Ch3 frame={frame} /></div>}
+      {frame >= C4 - 12 && frame < C5 + 12 && <div style={{ opacity: fade(C4, C5 + 12), position: 'absolute', inset: 0 }}><Ch4 frame={frame} /></div>}
+      {frame >= C5 - 12 && <div style={{ opacity: fade(C5, TOTAL), position: 'absolute', inset: 0 }}><Ch5 frame={frame} /></div>}
     </AbsoluteFill>
   );
 };

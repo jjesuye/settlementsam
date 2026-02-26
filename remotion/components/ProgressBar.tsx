@@ -16,8 +16,8 @@ export const ProgressBar: React.FC = () => {
         top: 0,
         left: 0,
         right: 0,
-        height: 4,
-        background: 'rgba(255,255,255,0.1)',
+        height: 3,
+        background: 'rgba(255,255,255,0.08)',
         zIndex: 100,
       }}
     >
@@ -25,8 +25,8 @@ export const ProgressBar: React.FC = () => {
         style={{
           height: '100%',
           width: `${progress}%`,
-          background: '#00E676',
-          transition: 'none',
+          background: 'linear-gradient(90deg, #E8A838, #4A7C59)',
+          borderRadius: '0 2px 2px 0',
         }}
       />
     </div>
