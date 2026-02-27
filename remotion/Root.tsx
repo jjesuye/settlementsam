@@ -35,7 +35,7 @@ export const RemotionRoot: React.FC = () => {
       <Composition
         id="FullPitch"
         component={FullPitch}
-        durationInFrames={2700}
+        durationInFrames={3300}
         fps={30}
         width={1920}
         height={1080}

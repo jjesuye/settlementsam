@@ -1,14 +1,17 @@
 /**
  * POST /api/billing/invoice
  *
- * Creates a Stripe invoice for a client purchasing a prepaid lead package.
- * Minimum package: 25 leads at $250/lead = $6,250.
+ * Creates a Stripe invoice for a client purchasing a prepaid verified-case package.
+ * Minimum package: 25 cases. Tier pricing:
+ *   Starter  25+   $250/case
+ *   Growth  100+   $225/case
+ *   Scale   250+   $200/case
  *
- * Body: { clientId: string, quantity: number }
- * Response 200: { success: true, invoiceId: string, invoiceUrl: string, amountDue: number }
+ * Body: { clientId: string, quantity: number, throttleMode?: 'conservative' | 'standard' | 'aggressive' }
+ * Response 200: { success: true, invoiceId, invoiceUrl, amountDue, quantity, tierName, pricePerCase }
  *
- * On payment:  Stripe fires invoice.payment_succeeded → /api/billing/webhook
- *              which updates client.balance and client.leads_purchased in Firestore.
+ * On payment: Stripe fires invoice.payment_succeeded → /api/billing/webhook
+ *             which updates client balance, leads_purchased, and delivery schedule.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -16,12 +19,11 @@ import jwt from 'jsonwebtoken';
 import Stripe from 'stripe';
 import { adminDb } from '@/lib/firebase/admin';
 import type { FsClient } from '@/lib/firebase/types';
+import { calculateOrderPrice, MIN_ORDER } from '@/lib/pricing';
+import type { ThrottleMode } from '@/lib/deliverySchedule';
 
 const JWT_SECRET = process.env.JWT_SECRET ?? 'dev-secret-change-in-production';
 const STRIPE_SK  = process.env.STRIPE_SECRET_KEY ?? '';
-
-const LEAD_PRICE_CENTS = 25_000;  // $250.00
-const MIN_LEADS        = 25;
 
 function verifyAdmin(req: NextRequest): boolean {
   try {
@@ -31,6 +33,10 @@ function verifyAdmin(req: NextRequest): boolean {
     return p.role === 'admin';
   } catch { return false; }
 }
+
+const VALID_THROTTLE_MODES: ThrottleMode[] = ['conservative', 'standard', 'aggressive'];
+
+export const dynamic = 'force-dynamic';
 
 export async function POST(req: NextRequest) {
   if (!verifyAdmin(req)) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
@@ -47,13 +53,21 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'invalid_json' }, { status: 400 });
   }
 
-  const { clientId, quantity } = body;
+  const { clientId, quantity, throttleMode = 'standard' } = body;
   if (!clientId) return NextResponse.json({ error: 'clientId required' }, { status: 400 });
 
-  const qty = Number(quantity ?? MIN_LEADS);
-  if (!Number.isInteger(qty) || qty < MIN_LEADS) {
+  const qty = Number(quantity ?? MIN_ORDER);
+  if (!Number.isInteger(qty) || qty < MIN_ORDER) {
     return NextResponse.json(
-      { error: 'invalid_quantity', message: `Minimum purchase is ${MIN_LEADS} leads.` },
+      { error: 'invalid_quantity', message: `Minimum purchase is ${MIN_ORDER} verified cases.` },
+      { status: 400 },
+    );
+  }
+
+  const mode = String(throttleMode);
+  if (!VALID_THROTTLE_MODES.includes(mode as ThrottleMode)) {
+    return NextResponse.json(
+      { error: 'invalid_throttle_mode', message: 'throttleMode must be conservative, standard, or aggressive.' },
       { status: 400 },
     );
   }
@@ -63,6 +77,9 @@ export async function POST(req: NextRequest) {
 
   const client = { id: clientDoc.id, ...clientDoc.data() } as FsClient & { id: string };
   const stripe  = new Stripe(STRIPE_SK);
+
+  // ── Tier pricing ──────────────────────────────────────────────────────────────
+  const { tierName, pricePerCase, totalCents } = calculateOrderPrice(qty);
 
   // ── Ensure Stripe customer exists ─────────────────────────────────────────────
   let stripeCustomerId = client.stripe_customer_id;
@@ -77,17 +94,19 @@ export async function POST(req: NextRequest) {
   }
 
   // ── Create invoice ─────────────────────────────────────────────────────────────
-  const totalCents = qty * LEAD_PRICE_CENTS;
-
   const invoice = await stripe.invoices.create({
     customer:          stripeCustomerId,
     collection_method: 'send_invoice',
-    days_until_due:    14,
+    days_until_due:    0,   // payment due upfront
     auto_advance:      false,
     metadata: {
       settlement_sam_client_id: client.id,
       lead_quantity:            String(qty),
+      tier_name:                tierName,
+      price_per_case:           String(pricePerCase),
+      throttle_mode:            mode,
     },
+    footer: 'Payment is due upon receipt. Verified cases will be delivered according to your selected throttle schedule once payment clears.',
   });
 
   await stripe.invoiceItems.create({
@@ -95,19 +114,24 @@ export async function POST(req: NextRequest) {
     invoice:     invoice.id,
     amount:      totalCents,
     currency:    'usd',
-    description: `${qty} verified personal injury leads — Settlement Sam`,
+    description: `${qty} SMS-verified personal injury cases — ${tierName} package ($${pricePerCase}/case) — Settlement Sam\n\nDelivery begins within 1 business day of payment. Cases are exclusive to your firm for 90 days from delivery. Full upfront payment required before delivery begins.`,
   });
 
   const finalized = await stripe.invoices.finalizeInvoice(invoice.id);
   await stripe.invoices.sendInvoice(finalized.id);
 
-  console.log(`[billing] Invoice ${finalized.id} → Client ${client.id} (${client.firm}) — $${(totalCents / 100).toFixed(2)} for ${qty} leads`);
+  console.log(
+    `[billing] Invoice ${finalized.id} → Client ${client.id} (${client.firm}) — ` +
+    `$${(totalCents / 100).toFixed(2)} for ${qty} cases (${tierName} @ $${pricePerCase}/case, ${mode} throttle)`,
+  );
 
   return NextResponse.json({
-    success:    true,
-    invoiceId:  finalized.id,
-    invoiceUrl: finalized.hosted_invoice_url,
-    amountDue:  totalCents,
-    quantity:   qty,
+    success:      true,
+    invoiceId:    finalized.id,
+    invoiceUrl:   finalized.hosted_invoice_url,
+    amountDue:    totalCents,
+    quantity:     qty,
+    tierName,
+    pricePerCase,
   });
 }

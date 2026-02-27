@@ -11,7 +11,6 @@
 import { useState } from 'react';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { validateEmailFormat } from '@/lib/validate-email';
 import { US_STATES } from '@/lib/quiz/questions';
@@ -69,7 +68,7 @@ function RoiCalculator() {
 
       <div className="sl-roi-results">
         <div className="sl-roi-row">
-          <span>Lead cost</span>
+          <span>Case cost</span>
           <span className="sl-roi-val sl-muted">${cost.toLocaleString()}</span>
         </div>
         <div className="sl-roi-row">
@@ -108,8 +107,8 @@ const pricingTiers = [
     name: 'Starter',
     qty: 25,
     price: '$6,250',
-    perLead: '$250/lead',
-    features: ['25 SMS-verified leads', 'Mixed quality tiers', 'Email delivery', 'Full injury profile', 'Replacement guarantee'],
+    perCase: '$250/case',
+    features: ['25 SMS-verified cases', 'Mixed injury profiles', 'Email delivery', 'Full injury profile', 'Replacement guarantee'],
     cta: 'Get Started',
     highlight: false,
   },
@@ -117,8 +116,8 @@ const pricingTiers = [
     name: 'Growth',
     qty: 100,
     price: '$22,500',
-    perLead: '$225/lead',
-    features: ['100 SMS-verified leads', 'Google Sheets push', 'Priority high-value leads', 'Dedicated account manager', 'Replacement guarantee', 'Weekly reporting'],
+    perCase: '$225/case',
+    features: ['100 SMS-verified cases', 'Google Sheets push', 'Priority high-value cases', 'Dedicated account manager', 'Replacement guarantee', 'Weekly reporting'],
     cta: 'Most Popular',
     highlight: true,
   },
@@ -126,8 +125,8 @@ const pricingTiers = [
     name: 'Scale',
     qty: 250,
     price: '$50,000',
-    perLead: '$200/lead',
-    features: ['250 SMS-verified leads', 'Custom lead scoring', 'White-glove onboarding', 'API access', 'SLA guarantee', 'Priority support'],
+    perCase: '$200/case',
+    features: ['250 SMS-verified cases', 'Custom case scoring', 'White-glove onboarding', 'API access', 'SLA guarantee', 'Priority support'],
     cta: 'Contact Us',
     highlight: false,
   },
@@ -169,7 +168,7 @@ function PricingSection({ name, state }: { name: string; state: string }) {
               {tier.highlight && <div className="sl-pricing-badge">Most Popular</div>}
               <h3>{tier.name}</h3>
               <div className="sl-pricing-price">{tier.price}</div>
-              <div className="sl-pricing-per">{tier.perLead}</div>
+              <div className="sl-pricing-per">{tier.perCase}</div>
               <ul className="sl-pricing-features">
                 {tier.features.map(f => <li key={f}>✓ {f}</li>)}
               </ul>
@@ -192,7 +191,6 @@ function PricingSection({ name, state }: { name: string; state: string }) {
 type GateState = 'idle' | 'submitting' | 'error';
 
 function PricingGate({ onUnlock }: { onUnlock: (name: string, state: string) => void }) {
-  const router       = useRouter();
   const [gateState,   setGateState]   = useState<GateState>('idle');
   const [name,        setName]        = useState('');
   const [firm,        setFirm]        = useState('');
@@ -201,6 +199,7 @@ function PricingGate({ onUnlock }: { onUnlock: (name: string, state: string) => 
   const [phone,       setPhone]       = useState('');
   const [state,       setState]       = useState('');
   const [caseVolume,  setCaseVolume]  = useState('');
+  const [barNumber,   setBarNumber]   = useState('');
   const [formError,   setFormError]   = useState('');
 
   async function handleSubmit(e: React.FormEvent) {
@@ -216,7 +215,12 @@ function PricingGate({ onUnlock }: { onUnlock: (name: string, state: string) => 
       const res  = await fetch('/api/attorney-inquiry', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ name, firm, email, phone, state, case_volume: caseVolume }),
+        body:    JSON.stringify({
+          name, firm, email, phone, state,
+          case_volume: caseVolume,
+          bar_number:  barNumber,
+          source:      'pricing_gate',
+        }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -227,11 +231,8 @@ function PricingGate({ onUnlock }: { onUnlock: (name: string, state: string) => 
         }
         throw new Error(data.message ?? 'Submission failed.');
       }
-      // Redirect to attorney thank-you page with context
-      const params = new URLSearchParams({
-        name, firm, email, phone, state, case_volume: caseVolume,
-      });
-      router.push(`/thank-you/attorney?${params.toString()}`);
+      // Reveal pricing inline — no redirect
+      onUnlock(name, state);
     } catch (err: unknown) {
       setFormError(err instanceof Error ? err.message : 'Something went wrong. Please try again.');
       setGateState('idle');
@@ -250,7 +251,7 @@ function PricingGate({ onUnlock }: { onUnlock: (name: string, state: string) => 
       <div className="container">
         <div className="sl-gate-card">
           <div className="sl-gate-lock">🔒</div>
-          <h2 className="sl-gate-headline">Get Our Current Lead Pricing</h2>
+          <h2 className="sl-gate-headline">Get Our Current Case Pricing</h2>
           <p className="sl-gate-sub">
             Pricing is shared exclusively with verified law firms. Takes 30 seconds.
           </p>
@@ -326,6 +327,19 @@ function PricingGate({ onUnlock }: { onUnlock: (name: string, state: string) => 
               </div>
             </div>
 
+            <div className="sl-form-field">
+              <label>State Bar Number *</label>
+              <input
+                required value={barNumber} onChange={e => setBarNumber(e.target.value)}
+                placeholder="e.g. 12345678"
+                className="sl-input"
+                autoComplete="off"
+              />
+              <p style={{ fontSize: 11, color: '#9CA3AF', marginTop: 4 }}>
+                Used to verify your firm. Kept confidential.
+              </p>
+            </div>
+
             {formError && <p className="sl-form-error">{formError}</p>}
 
             <button
@@ -346,11 +360,11 @@ function PricingGate({ onUnlock }: { onUnlock: (name: string, state: string) => 
 
 const features = [
   { icon: '🎯', title: 'Pre-screened Leads',    body: 'Every lead goes through a multi-step intake screening before you ever see it. No more guessing.' },
-  { icon: '✅', title: 'SMS Verified',           body: 'Leads verify their phone number via Firebase text code. No bots. No fake numbers.' },
+  { icon: '✅', title: 'SMS Verified',           body: 'Every claimant verifies their phone number via SMS text code. No bots. No fake numbers.' },
   { icon: '📋', title: 'Full Injury Profile',    body: 'Surgery, hospitalization, treatment status, lost wages, fault level — all captured upfront.' },
   { icon: '📊', title: 'Google Sheets Push',     body: "New leads land directly in your firm's spreadsheet. Integrate with your CRM in minutes." },
   { icon: '🔄', title: 'Replacement Guarantee',  body: 'If a lead is uncontactable within 48 hours, we replace it. No questions asked.' },
-  { icon: '⚡', title: 'Instant Delivery',       body: 'Lead data hits your inbox and your Sheet within seconds of verification.' },
+  { icon: '⚡', title: 'Instant Delivery',       body: 'Case data hits your inbox and your Sheet within seconds of verification.' },
 ];
 
 const howItWorks = [
@@ -544,7 +558,7 @@ export default function AttorneysPage() {
           >
             <Player
               component={FullPitch}
-              durationInFrames={2700}
+              durationInFrames={3300}
               fps={30}
               compositionWidth={1920}
               compositionHeight={1080}
@@ -643,7 +657,7 @@ export default function AttorneysPage() {
               <motion.h2 variants={fadeUp}>Ready to Fill Your Pipeline?</motion.h2>
               <motion.p variants={fadeUp}>
                 Schedule a 20-minute demo with our team. We'll walk you through the platform,
-                show you sample lead profiles, and help you set up your first intake run.
+                show you sample case profiles, and help you set up your first intake run.
               </motion.p>
               <motion.ul variants={fadeUp} className="sl-book-bullets">
                 <li>✓ No obligation</li>

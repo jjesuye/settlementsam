@@ -27,7 +27,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const { name, firm, email, phone, state, case_volume } = body;
+  const { name, firm, email, phone, state, case_volume, bar_number, source } = body;
 
   // ── Basic validation ──────────────────────────────────────────────────────────
   if (!name || typeof name !== 'string' || !name.trim()) {
@@ -58,17 +58,18 @@ export async function POST(req: NextRequest) {
   // ── Save to Firestore ─────────────────────────────────────────────────────────
   try {
     const docRef = await adminDb.collection('attorney_inquiries').add({
-      name:         name.trim(),
-      firm:         firm.trim(),
-      email:        email.trim().toLowerCase(),
-      phone:        phone.trim(),
-      state:        state.trim(),
-      case_volume:  case_volume.trim(),
-      timestamp:    Date.now(),
-      source:       'attorneys_page',
-      contacted:    false,
+      name:           name.trim(),
+      firm:           firm.trim(),
+      email:          email.trim().toLowerCase(),
+      phone:          phone.trim(),
+      state:          state.trim(),
+      case_volume:    case_volume.trim(),
+      bar_number:     typeof bar_number === 'string' ? bar_number.trim() : '',
+      timestamp:      Date.now(),
+      source:         typeof source === 'string' && source.trim() ? source.trim() : 'attorneys_page',
+      contacted:      false,
       pricing_viewed: true,
-      notes:        '',
+      notes:          '',
     });
 
     console.log(`[attorney-inquiry] New inquiry: ${name.trim()} @ ${firm.trim()} (${state})`);

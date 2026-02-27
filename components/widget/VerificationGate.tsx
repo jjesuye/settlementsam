@@ -9,10 +9,8 @@
 
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { getAuth } from 'firebase/auth';
 import { formatCurrency } from '@/lib/estimator/logic';
 import type { EstimateRange, EstimatorInputs } from '@/lib/estimator/types';
-import { clientApp } from '@/lib/firebase/client';
 import SMSVerification from '@/components/SMSVerification';
 
 export interface VerificationGateProps {
@@ -51,15 +49,12 @@ export function VerificationGate({
   );
 
   // Called by SMSVerification after phone is verified
-  const handleSmsVerified = async (phoneNumber: string) => {
+  const handleSmsVerified = async (phoneNumber: string, phoneToken: string) => {
     setLoading(true);
     setError('');
     try {
-      const auth    = getAuth(clientApp);
-      const idToken = await auth.currentUser?.getIdToken() ?? '';
-
       const body: Record<string, unknown> = {
-        idToken,
+        phoneToken,
         name:         name.trim(),
         phone:        phoneNumber,
         injuryType:   inputs.injuryType,

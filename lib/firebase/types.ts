@@ -35,6 +35,8 @@ export interface FsLead {
   statute_warning: boolean;
   disqualified: boolean;
   disqualify_reason: string | null;
+  exclusive_until: number | null;   // Unix ms — exclusivity expiry (now + 90 days on delivery)
+  exclusive_firm:  string | null;   // client_id that holds exclusivity
 }
 
 export interface FsVerificationCode {
@@ -106,6 +108,19 @@ export interface FsAttorneyInquiry {
   contacted: boolean;
   pricing_viewed: boolean;
   notes: string;
+}
+
+export interface FsDeliverySchedule {
+  id?: string;
+  client_id:         string;
+  throttle_mode:     string;                  // conservative | standard | aggressive
+  total_qty:         number;
+  schedule:          Record<string, number>;  // ISO date → target count
+  delivered_by_date: Record<string, number>;  // ISO date → actual delivered
+  created_at:        number;                  // Unix ms
+  start_date:        string;                  // ISO date YYYY-MM-DD
+  tier_name:         string;                  // Starter | Growth | Scale
+  price_per_case:    number;                  // dollars
 }
 
 export interface FsBooking {

@@ -12,10 +12,10 @@
     "setup-admin": "ts-node --project tsconfig.json scripts/setup-admin.ts",
     "admin:setup": "ts-node --project tsconfig.json scripts/setup-admin.ts",
     "remotion:studio": "remotion studio remotion/index.ts",
-    "remotion:render:hook": "remotion render remotion/index.ts LinkedInHook out/linkedin-hook.mp4",
-    "remotion:render:loom": "remotion render remotion/index.ts LoomDemo out/loom-demo.mp4",
-    "remotion:render:roi": "remotion render remotion/index.ts ROIBreakdown out/roi-breakdown.mp4",
-    "remotion:render:pitch": "remotion render remotion/index.ts FullPitch out/full-pitch.mp4"
+    "remotion:render:hook": "remotion render remotion/index.ts LinkedInHook out/linkedin-hook.mp4 --codec h264 --pixel-format yuv420p",
+    "remotion:render:loom": "remotion render remotion/index.ts LoomDemo out/loom-demo.mp4 --codec h264 --pixel-format yuv420p",
+    "remotion:render:roi": "remotion render remotion/index.ts ROIBreakdown out/roi-breakdown.mp4 --codec h264 --pixel-format yuv420p",
+    "remotion:render:pitch": "remotion render remotion/index.ts FullPitch out/full-pitch.mp4 --codec h264 --pixel-format yuv420p"
   },
   "dependencies": {
     "@opentelemetry/api": "^1.9.0",

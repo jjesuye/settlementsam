@@ -17,7 +17,6 @@ import React, { useCallback, useReducer, useState, useMemo, useEffect } from 're
 import { motion, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { getAuth } from 'firebase/auth';
 import { QUIZ_QUESTIONS, US_STATES } from '@/lib/quiz/questions';
 import type { QuizQuestion, QuizOption } from '@/lib/quiz/questions';
 import {
@@ -31,7 +30,6 @@ import type { QuizAnswers, DisqualReason } from '@/lib/quiz/types';
 import { INITIAL_ANSWERS } from '@/lib/quiz/types';
 import { formatCurrency, LOST_WAGES_MAX } from '@/lib/estimator/logic';
 import { validateEmailFormat } from '@/lib/validate-email';
-import { clientApp } from '@/lib/firebase/client';
 import SMSVerification from '@/components/SMSVerification';
 
 // ── Reducer ───────────────────────────────────────────────────────────────────
@@ -195,14 +193,11 @@ export function QuizFlow() {
 
   // ── Called by SMSVerification after phone is verified ──────────────────────
 
-  const handleSmsVerified = async (phoneNumber: string) => {
+  const handleSmsVerified = async (phoneNumber: string, phoneToken: string) => {
     setLoading(true);
     setSmsError('');
 
     try {
-      const auth    = getAuth(clientApp);
-      const idToken = await auth.currentUser?.getIdToken() ?? '';
-
       const score = calculateScore(answers as QuizAnswers);
       const tier  = scoreTier(score);
       const est   = estimate;
@@ -213,7 +208,7 @@ export function QuizFlow() {
 
       const body: Record<string, unknown> = {
         ...answers,
-        idToken,
+        phoneToken,
         name:         `${firstName.trim()} ${lastName.trim()}`,
         email:        email.trim(),
         phone:        phoneNumber,

@@ -55,13 +55,14 @@ export async function PATCH(req: NextRequest) {
   try { body = await req.json(); }
   catch { return NextResponse.json({ error: 'invalid_json' }, { status: 400 }); }
 
-  const { id, contacted, notes } = body;
+  const { id, contacted, notes, converted } = body;
   if (!id || typeof id !== 'string') {
     return NextResponse.json({ error: 'id is required' }, { status: 400 });
   }
 
   const update: Record<string, unknown> = {};
   if (typeof contacted === 'boolean') update.contacted = contacted;
+  if (typeof converted === 'boolean') update.converted = converted;
   if (typeof notes     === 'string')  update.notes     = notes;
 
   if (Object.keys(update).length === 0) {

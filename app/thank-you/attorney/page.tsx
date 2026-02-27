@@ -267,8 +267,8 @@ function AttorneyThankYouContent() {
         <motion.div variants={fadeUp} className="ty-next-card">
           <h3 className="ty-next-title">On the call we'll cover:</h3>
           <ul className="ty-expect-list">
-            <li>✓ Current lead inventory in your state</li>
-            <li>✓ Lead quality samples and scoring breakdown</li>
+            <li>✓ Current verified case inventory in your state</li>
+            <li>✓ Case quality samples and intake breakdown</li>
             <li>✓ Volume pricing and exclusivity terms</li>
             <li>✓ How the replacement guarantee works</li>
           </ul>
