@@ -1,0 +1,62 @@
+runConfig:
+  minInstances: 0
+
+env:
+  - variable: NEXT_PUBLIC_FIREBASE_API_KEY
+    value: "AIzaSyDLUkRSDZc4jeEVLm5Ytjcs-22iNlS-pvs"
+    availability:
+      - BUILD
+      - RUNTIME
+  - variable: NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN
+    value: "settlement-sam-77db2.firebaseapp.com"
+    availability:
+      - BUILD
+      - RUNTIME
+  - variable: NEXT_PUBLIC_FIREBASE_PROJECT_ID
+    value: "settlement-sam-77db2"
+    availability:
+      - BUILD
+      - RUNTIME
+  - variable: NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET
+    value: "settlement-sam-77db2.firebasestorage.app"
+    availability:
+      - BUILD
+      - RUNTIME
+  - variable: NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID
+    value: "693548612429"
+    availability:
+      - BUILD
+      - RUNTIME
+  - variable: NEXT_PUBLIC_FIREBASE_APP_ID
+    value: "1:693548612429:web:1a2811847ccd05d1261504"
+    availability:
+      - BUILD
+      - RUNTIME
+  - variable: GMAIL_USER
+    secret: GMAIL_USER
+    availability:
+      - RUNTIME
+  - variable: GMAIL_APP_PASSWORD
+    secret: GMAIL_APP_PASSWORD
+    availability:
+      - RUNTIME
+  - variable: FIREBASE_PROJECT_ID
+    value: "settlement-sam-77db2"
+    availability:
+      - RUNTIME
+  - variable: FIREBASE_CLIENT_EMAIL
+    secret: SA_CLIENT_EMAIL
+    availability:
+      - RUNTIME
+  - variable: FIREBASE_PRIVATE_KEY
+    secret: SA_PRIVATE_KEY
+    availability:
+      - RUNTIME
+  - variable: JWT_SECRET
+    secret: JWT_SECRET
+    availability:
+      - RUNTIME
+  - variable: ADMIN_PASSWORD_HASH
+    secret: ADMIN_PASSWORD_HASH
+    availability:
+      - RUNTIME

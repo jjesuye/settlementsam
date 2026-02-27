@@ -42,6 +42,11 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Diagnostic: log env var presence to Firebase console
+    console.log('[sms/send] ENV CHECK — GMAIL_USER:', process.env.GMAIL_USER ? 'SET' : 'MISSING');
+    console.log('[sms/send] ENV CHECK — GMAIL_APP_PASSWORD:', process.env.GMAIL_APP_PASSWORD ? 'SET' : 'MISSING');
+    console.log('[sms/send] All env keys with GMAIL:', Object.keys(process.env).filter(k => k.includes('GMAIL')));
+
     // Guard: fail fast if mailer credentials are absent
     if (!process.env.GMAIL_USER || !process.env.GMAIL_APP_PASSWORD) {
       console.error('[sms/send] MISSING ENV: GMAIL_USER or GMAIL_APP_PASSWORD not set');
