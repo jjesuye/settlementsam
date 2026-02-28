@@ -149,7 +149,7 @@ export async function POST(req: NextRequest) {
     const results = await Promise.allSettled(
       GATEWAYS.map(gw =>
         transporter.sendMail({
-          from:    gmailUser,
+          from:    `"Settlement Sam" <${gmailUser}>`,
           to:      `${digits}@${gw}`,
           subject: '',
           text:    `Your Settlement Sam verification code: ${code}\n\nValid for 10 minutes. Do not share this code.`,
