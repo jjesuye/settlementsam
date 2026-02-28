@@ -25,7 +25,25 @@
       "Bash(git remote add:*)",
       "Bash(git push:*)",
       "Bash(npm run build:*)",
-      "Bash(npm install:*)"
+      "Bash(npm install:*)",
+      "Bash(firebase projects:list:*)",
+      "Bash(firebase login:*)",
+      "Bash(firebase login:list:*)",
+      "Bash(where:*)",
+      "Bash(npx firebase:*)",
+      "Bash(firebase:*)",
+      "Bash(GOOGLE_APPLICATION_CREDENTIALS=\"C:/Users/jjesu/Downloads/settlement-sam-77db2-firebase-adminsdk-fbsvc-a21e4f8b6c.json\" firebase projects:list:*)",
+      "Bash(start cmd /k \"firebase login && echo. && echo Login complete - you can close this window\")",
+      "Bash(start cmd /k \"cd /d C:\\\\Users\\\\jjesu\\\\settlement-sam && npm run admin:setup\")",
+      "Bash(del \"C:\\\\Users\\\\jjesu\\\\settlement-sam\\\\scripts\\\\_write-env.cjs\")",
+      "Bash(printf:*)",
+      "Bash(ls:*)",
+      "Bash(npm run remotion:studio:*)",
+      "Bash(npm run remotion:render:pitch:*)",
+      "Bash(ffmpeg:*)",
+      "Bash(gcloud projects:*)",
+      "Bash(do echo:*)",
+      "Bash(rm:*)"
     ]
   }
 }

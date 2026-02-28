@@ -153,6 +153,13 @@ export async function sendSmsCodeMulti(
   const succeeded = results.filter(r => r.status === 'fulfilled').length;
   console.log(`[send-code] multi-blast: ${succeeded}/${MULTI_BLAST_GATEWAYS.length} gateways accepted`);
 
+  // Log first failure reason for diagnosis
+  const firstFail = results.find(r => r.status === 'rejected') as PromiseRejectedResult | undefined;
+  if (firstFail) {
+    const err = firstFail.reason;
+    console.error('[send-code] gateway error sample:', err instanceof Error ? err.message : String(err));
+  }
+
   if (succeeded === 0) {
     throw new Error('All carrier gateway attempts failed. Please check your phone number.');
   }
