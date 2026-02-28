@@ -43,7 +43,9 @@
       "Bash(ffmpeg:*)",
       "Bash(gcloud projects:*)",
       "Bash(do echo:*)",
-      "Bash(rm:*)"
+      "Bash(rm:*)",
+      "Bash(npm test:*)",
+      "Bash(gcloud auth:*)"
     ]
   }
 }
