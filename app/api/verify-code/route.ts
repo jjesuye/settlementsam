@@ -19,7 +19,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import jwt from 'jsonwebtoken';
-import { adminDb, adminAuth } from '@/lib/firebase/admin';
+import { adminDb } from '@/lib/firebase/admin';
 import { calculateScore, scoreTier, calculateQuizEstimate } from '@/lib/quiz/scoring';
 import type { QuizAnswers } from '@/lib/quiz/types';
 import { validateEmailServer } from '@/lib/validate-email-server';
@@ -71,16 +71,12 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Verify the Firebase ID token issued by signInWithPhoneNumber on the client
+  // Verify the short-lived JWT issued by /api/sms/verify
   let phone: string;
   try {
-    const decoded   = await adminAuth.verifyIdToken(phoneToken);
-    const rawPhone  = decoded.phone_number;
-    if (!rawPhone) throw new Error('No phone_number claim in token');
-    // Firebase stores phone in E.164 format (+1XXXXXXXXXX) — strip country code
-    const stripped = rawPhone.replace(/^\+1/, '');
-    if (stripped.length !== 10) throw new Error('Unexpected phone format');
-    phone = stripped;
+    const decoded = jwt.verify(phoneToken, JWT_SECRET) as { phone: string; verified: boolean };
+    if (!decoded.phone || !decoded.verified) throw new Error('Invalid token claims');
+    phone = decoded.phone;
   } catch {
     return NextResponse.json(
       { error: 'unauthorized', message: 'Phone verification expired or invalid. Please verify your number again.' },
@@ -156,7 +152,7 @@ export async function POST(req: NextRequest) {
       name:                String(name  ?? '').trim(),
       phone,
       email:               email ? String(email).trim() : null,
-      carrier:             'firebase_phone_auth',
+      carrier:             'gateway_sms',
       state:               String(leadState ?? '') || null,
       injury_type:         String(injuryType ?? 'soft_tissue'),
       surgery:             hasSurgeryBool,

@@ -2,17 +2,16 @@
 /**
  * components/SMSVerification.tsx
  *
- * Phone verification using Firebase Phone Auth.
- * Texts come from Firebase's own short codes (22395, 44398, etc.) — not personal email.
+ * Phone verification using the /api/sms/send + /api/sms/verify routes.
+ * Codes are sent via carrier email gateways; /api/sms/verify returns a
+ * short-lived phoneToken JWT that proves phone ownership to /api/verify-code.
  *
  * Props:
- *   onVerified(phone, idToken) — called after code confirmed.
- *   leadName?                  — personalised greeting.
+ *   onVerified(phone, phoneToken) — called after code confirmed.
+ *   leadName?                     — personalised greeting.
  */
 
-import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { RecaptchaVerifier, signInWithPhoneNumber, initializeRecaptchaConfig, type ConfirmationResult } from 'firebase/auth';
-import { auth } from '@/lib/firebase/client';
+import React, { useState } from 'react';
 
 // ── Phone formatter ────────────────────────────────────────────────────────────
 
@@ -27,25 +26,10 @@ function rawDigits(formatted: string): string {
   return formatted.replace(/\D/g, '');
 }
 
-function firebaseErrorMessage(err: unknown): string {
-  if (err && typeof err === 'object' && 'code' in err) {
-    switch ((err as { code: string }).code) {
-      case 'auth/invalid-phone-number':      return 'Please enter a valid 10-digit US phone number.';
-      case 'auth/too-many-requests':         return 'Too many attempts. Please wait a few minutes and try again.';
-      case 'auth/invalid-verification-code': return 'Incorrect code. Please try again.';
-      case 'auth/code-expired':              return 'Code expired. Please request a new one.';
-      case 'auth/missing-phone-number':      return 'Please enter your phone number.';
-      case 'auth/quota-exceeded':            return 'SMS quota exceeded. Please try again later.';
-      case 'auth/captcha-check-failed':      return 'Verification check failed. Please try again.';
-    }
-  }
-  return err instanceof Error ? err.message : 'Something went wrong. Please try again.';
-}
-
 // ── Props ──────────────────────────────────────────────────────────────────────
 
 interface Props {
-  onVerified: (phone: string, idToken: string) => void;
+  onVerified: (phone: string, phoneToken: string) => void;
   leadName?:  string;
 }
 
@@ -61,49 +45,7 @@ export default function SMSVerification({ onVerified, leadName }: Props) {
   const [cooldown,  setCooldown]  = useState(0);
   const [resends,   setResends]   = useState(0);
 
-  const cooldownRef           = useRef<ReturnType<typeof setInterval> | null>(null);
-  const recaptchaVerifierRef  = useRef<RecaptchaVerifier | null>(null);
-  const confirmationResultRef = useRef<ConfirmationResult | null>(null);
-
-  /**
-   * Create a fresh RecaptchaVerifier and pre-render it so the widget is fully
-   * loaded before the user clicks "Send". Firebase Phone Auth requires a
-   * pre-initialized verifier — creating it lazily inside a click handler causes
-   * "Hostname match not found" (auth/captcha-check-failed) because the widget
-   * hasn't had time to negotiate with Google's reCAPTCHA servers.
-   */
-  const initRecaptcha = useCallback(async () => {
-    // Destroy any existing verifier first
-    try { recaptchaVerifierRef.current?.clear(); } catch { /* ignore */ }
-    recaptchaVerifierRef.current = null;
-
-    if (typeof window === 'undefined') return;
-
-    try {
-      const verifier = new RecaptchaVerifier(auth, 'recaptcha-container', {
-        size: 'invisible',
-      });
-      await verifier.render(); // blocks until widget is fully loaded
-      recaptchaVerifierRef.current = verifier;
-    } catch (e) {
-      console.error('[reCAPTCHA] init error:', e);
-    }
-  }, []);
-
-  // Initialize on mount; clean up on unmount
-  useEffect(() => {
-    // Ensure reCAPTCHA config is downloaded before creating the verifier.
-    // This is required in Firebase SDK v10+ to resolve the correct site key
-    // for the current hostname (fixes auth/captcha-check-failed).
-    initializeRecaptchaConfig(auth)
-      .then(() => initRecaptcha())
-      .catch(() => initRecaptcha()); // still try even if config fetch fails
-
-    return () => {
-      try { recaptchaVerifierRef.current?.clear(); } catch { /* ignore */ }
-      recaptchaVerifierRef.current = null;
-    };
-  }, [initRecaptcha]);
+  const cooldownRef = React.useRef<ReturnType<typeof setInterval> | null>(null);
 
   function startCooldown() {
     setCooldown(60);
@@ -116,13 +58,14 @@ export default function SMSVerification({ onVerified, leadName }: Props) {
     }, 1_000);
   }
 
-  async function doSend(digits: string) {
-    const verifier = recaptchaVerifierRef.current;
-    if (!verifier) throw new Error('Verification service not ready. Please refresh and try again.');
-    const result = await signInWithPhoneNumber(auth, `+1${digits}`, verifier);
-    confirmationResultRef.current = result;
-    // Verifier is consumed after use — re-initialize for any subsequent resend
-    initRecaptcha();
+  async function sendCode(digits: string) {
+    const res  = await fetch('/api/sms/send', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ phone: digits }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.message ?? 'Failed to send code.');
   }
 
   async function handleSend() {
@@ -134,12 +77,11 @@ export default function SMSVerification({ onVerified, leadName }: Props) {
     setError('');
     setSending(true);
     try {
-      await doSend(digits);
+      await sendCode(digits);
       setCodeSent(true);
       startCooldown();
     } catch (err: unknown) {
-      await initRecaptcha(); // fresh verifier for retry
-      setError(firebaseErrorMessage(err));
+      setError(err instanceof Error ? err.message : 'Something went wrong. Please try again.');
     } finally {
       setSending(false);
     }
@@ -152,11 +94,10 @@ export default function SMSVerification({ onVerified, leadName }: Props) {
     setError('');
     setSending(true);
     try {
-      await doSend(rawDigits(phone));
+      await sendCode(rawDigits(phone));
       startCooldown();
     } catch (err: unknown) {
-      await initRecaptcha();
-      setError(firebaseErrorMessage(err));
+      setError(err instanceof Error ? err.message : 'Something went wrong. Please try again.');
     } finally {
       setSending(false);
     }
@@ -164,18 +105,19 @@ export default function SMSVerification({ onVerified, leadName }: Props) {
 
   async function handleVerify(codeToVerify: string) {
     if (codeToVerify.length !== 6) return;
-    if (!confirmationResultRef.current) {
-      setError('Session expired. Please go back and request a new code.');
-      return;
-    }
     setError('');
     setVerifying(true);
     try {
-      const credential = await confirmationResultRef.current.confirm(codeToVerify);
-      const idToken    = await credential.user.getIdToken();
-      onVerified(rawDigits(phone), idToken);
+      const res  = await fetch('/api/sms/verify', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ phone: rawDigits(phone), code: codeToVerify }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message ?? 'Verification failed.');
+      onVerified(rawDigits(phone), data.phoneToken);
     } catch (err: unknown) {
-      setError(firebaseErrorMessage(err));
+      setError(err instanceof Error ? err.message : 'Something went wrong. Please try again.');
       setVerifying(false);
     }
   }
@@ -188,14 +130,9 @@ export default function SMSVerification({ onVerified, leadName }: Props) {
   }
 
   // ── Render ─────────────────────────────────────────────────────────────────
-  // Single return keeps #recaptcha-container permanently in the DOM so the
-  // verifier's widget is never torn down mid-session.
 
   return (
     <div>
-      {/* Invisible reCAPTCHA — must stay mounted; do NOT use display:none */}
-      <div id="recaptcha-container" style={{ position: 'absolute', width: 0, height: 0, overflow: 'hidden' }} />
-
       {/* ── Step 1: Phone input ─────────────────────────────────────────────── */}
       {!codeSent && (
         <div className="sms-gate">
@@ -320,9 +257,7 @@ export default function SMSVerification({ onVerified, leadName }: Props) {
             )}
 
             <button
-              onClick={async () => {
-                await initRecaptcha();
-                confirmationResultRef.current = null;
+              onClick={() => {
                 setCodeSent(false); setCode(''); setError(''); setCooldown(0);
               }}
               style={{
