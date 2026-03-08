@@ -265,6 +265,8 @@ export function QuizFlow() {
         name:   firstName.trim(),
         state:  String(answers.state ?? ''),
         leadId,
+        urgency: prefs.urgency,
+        hours:   prefs.preferredHours.join(','),
       });
       router.push(`/thank-you/lead?${params.toString()}`);
     } catch (err: unknown) {
