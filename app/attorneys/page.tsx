@@ -15,6 +15,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { validateEmailFormat } from '@/lib/validate-email';
 import { US_STATES } from '@/lib/quiz/questions';
 import { FullPitch } from '@/remotion/videos/FullPitch';
+import BookingCalendar from '@/components/BookingCalendar';
+import type { BookingSlot } from '@/components/BookingCalendar';
 
 // Player is client-only — lazy load to avoid SSR issues
 const Player = dynamic(() => import('@remotion/player').then(m => m.Player), { ssr: false });
@@ -190,7 +192,7 @@ function PricingSection({ name, state }: { name: string; state: string }) {
 
 type GateState = 'idle' | 'submitting' | 'error';
 
-function PricingGate({ onUnlock }: { onUnlock: (name: string, state: string) => void }) {
+function PricingGate({ onUnlock }: { onUnlock: (name: string, state: string, email: string, firm: string) => void }) {
   const [gateState,   setGateState]   = useState<GateState>('idle');
   const [name,        setName]        = useState('');
   const [firm,        setFirm]        = useState('');
@@ -232,7 +234,7 @@ function PricingGate({ onUnlock }: { onUnlock: (name: string, state: string) => 
         throw new Error(data.message ?? 'Submission failed.');
       }
       // Reveal pricing inline — no redirect
-      onUnlock(name, state);
+      onUnlock(name, state, email, firm);
     } catch (err: unknown) {
       setFormError(err instanceof Error ? err.message : 'Something went wrong. Please try again.');
       setGateState('idle');
@@ -363,8 +365,10 @@ const features = [
   { icon: '✅', title: 'SMS Verified',           body: 'Every claimant verifies their phone number via SMS text code. No bots. No fake numbers.' },
   { icon: '📋', title: 'Full Injury Profile',    body: 'Surgery, hospitalization, treatment status, lost wages, fault level — all captured upfront.' },
   { icon: '📊', title: 'Google Sheets Push',     body: "New leads land directly in your firm's spreadsheet. Integrate with your CRM in minutes." },
-  { icon: '🔄', title: 'Replacement Guarantee',  body: 'If a lead is uncontactable within 48 hours, we replace it. No questions asked.' },
+  { icon: '🔄', title: 'Replacement Guarantee',  body: 'If a lead is uncontactable or fails quality review, we replace it. Our team reviews every dispute and makes it right.' },
   { icon: '⚡', title: 'Instant Delivery',       body: 'Case data hits your inbox and your Sheet within seconds of verification.' },
+  { icon: '🔒', title: '90-Day Exclusivity',     body: 'Every case is yours alone for 90 days. No other firm in your market receives the same lead. Ever.' },
+  { icon: '📍', title: 'Geographic Lock-In',     body: 'We work first-come, first-served by market. Once your territory is active, competitors cannot purchase cases from the same area.' },
 ];
 
 const howItWorks = [
@@ -452,16 +456,28 @@ export default function AttorneysPage() {
   const [pricingUnlocked, setPricingUnlocked] = useState(false);
   const [unlockedName,    setUnlockedName]    = useState('');
   const [unlockedState,   setUnlockedState]   = useState('');
+  const [unlockedEmail,   setUnlockedEmail]   = useState('');
+  const [unlockedFirm,    setUnlockedFirm]    = useState('');
+  const [booked,          setBooked]          = useState(false);
 
   const closeMenu = () => setMenuOpen(false);
 
-  function handlePricingUnlock(name: string, state: string) {
+  function handlePricingUnlock(name: string, state: string, email: string, firm: string) {
     setUnlockedName(name);
     setUnlockedState(state);
+    setUnlockedEmail(email);
+    setUnlockedFirm(firm);
     setPricingUnlocked(true);
     // Scroll to pricing after a tick
     setTimeout(() => {
       document.getElementById('pricing')?.scrollIntoView({ behavior: 'smooth' });
+    }, 100);
+  }
+
+  function handleBooked(slot: BookingSlot) {
+    setBooked(true);
+    setTimeout(() => {
+      document.getElementById('book')?.scrollIntoView({ behavior: 'smooth' });
     }, 100);
   }
 
@@ -668,7 +684,16 @@ export default function AttorneysPage() {
             </motion.div>
             <motion.div initial={{ opacity: 0, y: 24 }} whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }} transition={{ duration: 0.5 }}>
-              <BookingForm />
+              {pricingUnlocked ? (
+                <BookingCalendar
+                  attorneyName={unlockedName}
+                  attorneyEmail={unlockedEmail}
+                  firmName={unlockedFirm}
+                  onBooked={handleBooked}
+                />
+              ) : (
+                <BookingForm />
+              )}
             </motion.div>
           </div>
         </div>
