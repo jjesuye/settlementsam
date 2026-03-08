@@ -314,7 +314,7 @@ export default function LandingPage() {
           <img
             src="/images/sam-icons/sam-logo.png"
             alt="Sam"
-            style={{ width: '48px', height: '48px', borderRadius: '50%', objectFit: 'cover' }}
+            className="sl-sam-avatar"
           />
         </div>
       </div>
