@@ -12,6 +12,12 @@ import type { FsLead as DbLead } from '@/lib/firebase/types';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
+const URGENCY_LABELS: Record<string, string> = {
+  asap:      'As soon as possible',
+  today:     'Today',
+  this_week: 'This week',
+};
+
 const INJURY_LABELS: Record<string, string> = {
   soft_tissue: 'Soft Tissue (Sprains / Whiplash)',
   fracture:    'Broken Bone / Fracture',
@@ -52,9 +58,13 @@ export function LeadProfileTab({ leadId, onBack }: { leadId: string | null; onBa
     else setLead(null);
   }, [leadId, fetchLead]);
 
-  const handlePdf = () => {
+  const handlePdf = async () => {
     if (!lead) return;
-    window.open(`/api/admin/leads/${lead.id}/pdf`, '_blank');
+    const res  = await adminFetch(`/api/admin/leads/${lead.id}/pdf`);
+    const blob = await res.blob();
+    const url  = URL.createObjectURL(blob);
+    window.open(url, '_blank');
+    setTimeout(() => URL.revokeObjectURL(url), 60_000);
   };
 
   const handleSend = async () => {
@@ -209,6 +219,22 @@ export function LeadProfileTab({ leadId, onBack }: { leadId: string | null; onBa
           <FieldPair label="Lost Wages"        value={lead.lost_wages_estimate > 0 ? formatCurrency(lead.lost_wages_estimate) : '$0'} />
           <FieldPair label="Has Attorney"      value={bool(lead.has_attorney)} />
           <FieldPair label="Insurance Contacted" value={bool(lead.insurance_contacted)} />
+        </div>
+      </div>
+
+      {/* Contact Preference */}
+      <div className="sa-panel">
+        <p className="sa-panel-title">Contact Preference</p>
+        <div className="sa-field-row">
+          {lead.contact_preference ? (
+            <>
+              <FieldPair label="Best Time to Reach" value={URGENCY_LABELS[lead.contact_preference.urgency] ?? lead.contact_preference.urgency} />
+              <FieldPair label="Preferred Hours"    value={lead.contact_preference.preferred_hours.map(h => h.charAt(0).toUpperCase() + h.slice(1)).join(', ')} />
+              <FieldPair label="Timezone"           value={lead.contact_preference.timezone || '—'} />
+            </>
+          ) : (
+            <FieldPair label="Status" value="Not collected" />
+          )}
         </div>
       </div>
 

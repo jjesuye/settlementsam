@@ -37,6 +37,12 @@ export interface FsLead {
   disqualify_reason: string | null;
   exclusive_until: number | null;   // Unix ms — exclusivity expiry (now + 90 days on delivery)
   exclusive_firm:  string | null;   // client_id that holds exclusivity
+  contact_preference?: {
+    urgency:         string;        // 'asap' | 'today' | 'this_week'
+    preferred_hours: string[];      // ['morning', 'afternoon', 'evening']
+    timezone:        string;        // IANA timezone e.g. 'America/Chicago'
+    saved_at:        number;        // Unix ms
+  } | null;
 }
 
 export interface FsVerificationCode {

@@ -1,7 +1,7 @@
 /**
  * GET /api/admin/leads/[id]/pdf
  *
- * Generates a branded Settlement Sam lead report PDF using PDFKit.
+ * Generates a professional Settlement Sam lead report PDF using PDFKit.
  * Returns the PDF as an inline binary stream.
  * Requires admin JWT.
  */
@@ -26,6 +26,15 @@ function verifyAdmin(req: NextRequest): boolean {
 
 function bool(v: boolean | null) { return v ? 'Yes' : 'No'; }
 
+function urgencyLabel(u: string) {
+  const map: Record<string, string> = {
+    asap:      'As soon as possible',
+    today:     'Today',
+    this_week: 'This week',
+  };
+  return map[u] ?? u;
+}
+
 function injuryLabel(t: string) {
   const map: Record<string, string> = {
     soft_tissue: 'Soft Tissue (Sprains / Whiplash)',
@@ -37,116 +46,147 @@ function injuryLabel(t: string) {
   return map[t] ?? t;
 }
 
-function tierColor(tier: string): [number, number, number] {
-  if (tier === 'HOT')  return [232, 168, 56];
-  if (tier === 'WARM') return [74,  124, 89];
-  return [107, 124, 116];
-}
-
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
   if (!verifyAdmin(req)) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
 
-  const doc = await adminDb.collection('leads').doc(params.id).get();
-  if (!doc.exists) return NextResponse.json({ error: 'not_found' }, { status: 404 });
+  const docSnap = await adminDb.collection('leads').doc(params.id).get();
+  if (!docSnap.exists) return NextResponse.json({ error: 'not_found' }, { status: 404 });
 
-  const lead = { id: doc.id, ...doc.data() } as FsLead & { id: string };
+  const lead = { id: docSnap.id, ...docSnap.data() } as FsLead & { id: string };
 
-  // Build PDF in memory
   const buffers: Buffer[] = [];
-  const pdfDoc = new PDFDocument({ size: 'LETTER', margin: 60, info: {
-    Title:   `Settlement Sam — Lead ${lead.id}`,
-    Author:  'Settlement Sam',
-    Subject: `Lead Report: ${lead.name}`,
-  }});
-
-  pdfDoc.on('data', (chunk: Buffer) => buffers.push(chunk));
-
-  const pdfComplete = new Promise<Buffer>((resolve, reject) => {
-    pdfDoc.on('end',   () => resolve(Buffer.concat(buffers)));
-    pdfDoc.on('error', reject);
+  const pdf = new PDFDocument({
+    size: 'LETTER', margin: 72,
+    info: {
+      Title:   `Lead Report — ${lead.name}`,
+      Author:  'Settlement Sam',
+      Subject: `Lead ID ${lead.id}`,
+    },
   });
 
-  // ── Brand header ─────────────────────────────────────────────────────────────
-  pdfDoc.rect(0, 0, pdfDoc.page.width, 80).fill('#2C3E35');
-  pdfDoc.fillColor('#E8A838').fontSize(22).font('Helvetica-Bold').text('Settlement Sam', 60, 26);
-  pdfDoc.fillColor('#6B7C74').fontSize(10).font('Helvetica').text('Confidential Lead Report', 60, 52);
-  pdfDoc.fillColor('#FDF6E9').fontSize(10).text(
-    `Generated ${new Date().toLocaleDateString('en-US', { dateStyle: 'long' })}`, 60, 52, { align: 'right' },
-  );
+  pdf.on('data', (chunk: Buffer) => buffers.push(chunk));
+  const done = new Promise<Buffer>((resolve, reject) => {
+    pdf.on('end',   () => resolve(Buffer.concat(buffers)));
+    pdf.on('error', reject);
+  });
 
-  // ── Tier badge ────────────────────────────────────────────────────────────────
-  const [r, g, b] = tierColor(lead.tier);
-  pdfDoc.moveDown(3);
-  const badgeY = pdfDoc.y;
-  pdfDoc.roundedRect(60, badgeY, 120, 32, 8).fillAndStroke(`rgb(${r},${g},${b})`, `rgb(${r},${g},${b})`);
-  pdfDoc.fillColor('#ffffff').fontSize(13).font('Helvetica-Bold')
-    .text(`${lead.tier} Lead`, 60, badgeY + 9, { width: 120, align: 'center' });
-  pdfDoc.fillColor('#2C3E35').fontSize(11).font('Helvetica')
-    .text(`Score: ${lead.score}/150`, 200, badgeY + 10);
-  pdfDoc.moveDown(2.5);
+  const W    = pdf.page.width - 144; // content width (margins on both sides)
+  const LEFT = 72;
 
-  // ── Section helper ────────────────────────────────────────────────────────────
-  function section(title: string) {
-    pdfDoc.fillColor('#E8DCC8').rect(60, pdfDoc.y, pdfDoc.page.width - 120, 24).fill();
-    pdfDoc.fillColor('#4A7C59').fontSize(11).font('Helvetica-Bold').text(title, 68, pdfDoc.y - 18);
-    pdfDoc.moveDown(1);
+  // ── Header ───────────────────────────────────────────────────────────────────
+  pdf.font('Helvetica-Bold').fontSize(20).fillColor('#1A1A1A')
+    .text('Settlement Sam', LEFT, 72);
+  pdf.font('Helvetica').fontSize(10).fillColor('#666666')
+    .text('Confidential Lead Report', LEFT, 96);
+  pdf.font('Helvetica').fontSize(10).fillColor('#666666')
+    .text(
+      `Generated: ${new Date().toLocaleDateString('en-US', { dateStyle: 'long' })}`,
+      LEFT, 96, { width: W, align: 'right' },
+    );
+
+  // Divider
+  pdf.moveTo(LEFT, 118).lineTo(LEFT + W, 118).strokeColor('#CCCCCC').lineWidth(0.5).stroke();
+  pdf.moveDown(0.5);
+
+  // ── Lead tier + score summary ─────────────────────────────────────────────
+  pdf.y = 134;
+  pdf.font('Helvetica-Bold').fontSize(13).fillColor('#1A1A1A')
+    .text(`${lead.tier} — Score ${lead.score} / 150`, LEFT);
+  pdf.font('Helvetica').fontSize(11).fillColor('#444444')
+    .text(
+      `Estimated Value: ${formatCurrency(lead.estimate_low)} – ${formatCurrency(lead.estimate_high)}`,
+      LEFT,
+    );
+  pdf.moveDown(1.2);
+
+  // ── Section/row helpers ───────────────────────────────────────────────────
+  function sectionHeader(title: string) {
+    pdf.moveDown(0.6);
+    pdf.font('Helvetica-Bold').fontSize(11).fillColor('#1A1A1A').text(title.toUpperCase(), LEFT);
+    pdf.moveTo(LEFT, pdf.y + 2).lineTo(LEFT + W, pdf.y + 2)
+      .strokeColor('#DDDDDD').lineWidth(0.5).stroke();
+    pdf.moveDown(0.8);
   }
 
   function row(label: string, value: string) {
-    const y = pdfDoc.y;
-    pdfDoc.fillColor('#6B7C74').fontSize(9).font('Helvetica').text(label.toUpperCase(), 60, y);
-    pdfDoc.fillColor('#2C3E35').fontSize(11).font('Helvetica').text(value, 220, y);
-    pdfDoc.moveDown(0.6);
+    const y = pdf.y;
+    pdf.font('Helvetica').fontSize(9).fillColor('#888888')
+      .text(label, LEFT, y, { width: 150, continued: false });
+    pdf.font('Helvetica').fontSize(10).fillColor('#1A1A1A')
+      .text(value, LEFT + 160, y, { width: W - 160 });
+    pdf.moveDown(0.55);
   }
 
-  // ── Contact ───────────────────────────────────────────────────────────────────
-  section('Contact Information');
-  row('Name',       lead.name);
-  row('Phone',      lead.phone);
-  row('Carrier',    lead.carrier);
-  row('Source',     lead.source.toUpperCase());
-  row('Submitted',  new Date(lead.timestamp).toLocaleString());
-  pdfDoc.moveDown(0.5);
+  // ── Contact Information ───────────────────────────────────────────────────
+  sectionHeader('Contact Information');
+  row('Name',            lead.name);
+  row('Phone',           lead.phone);
+  row('Email',           lead.email ?? 'Not provided');
+  row('Source',          lead.source === 'quiz' ? 'Online Quiz' : 'Widget');
+  row('Date Submitted',  new Date(lead.timestamp).toLocaleString('en-US', { dateStyle: 'long', timeStyle: 'short' }));
+  row('Phone Verified',  bool(lead.verified));
 
-  // ── Injury ────────────────────────────────────────────────────────────────────
-  section('Injury Details');
-  row('Injury Type',        injuryLabel(lead.injury_type));
-  row('Surgery',            bool(lead.surgery));
-  row('Hospitalized',       bool(lead.hospitalized));
-  row('Still in Treatment', bool(lead.still_treating));
-  row('Missed Work',        bool(lead.missed_work));
-  row('Lost Wages',         lead.lost_wages_estimate > 0 ? formatCurrency(lead.lost_wages_estimate) : '$0');
-  pdfDoc.moveDown(0.5);
+  // ── Incident Details ──────────────────────────────────────────────────────
+  sectionHeader('Incident Details');
+  row('Injury Type',         injuryLabel(lead.injury_type));
+  row('State',               lead.state ?? 'Not specified');
+  row('Incident Timeframe',  lead.incident_timeframe ?? 'Not specified');
+  row('At Fault',            bool(lead.at_fault));
 
-  // ── Estimate ──────────────────────────────────────────────────────────────────
-  section('Settlement Estimate');
-  row('Range', `${formatCurrency(lead.estimate_low)} – ${formatCurrency(lead.estimate_high)}`);
-  row('Score', String(lead.score));
-  row('Tier',  lead.tier);
-  pdfDoc.moveDown(0.5);
+  // ── Medical & Treatment ───────────────────────────────────────────────────
+  sectionHeader('Medical and Treatment');
+  row('Received Treatment',  bool(lead.verified));   // proxy for treatment
+  row('Hospitalized',        bool(lead.hospitalized));
+  row('Surgery Performed',   bool(lead.surgery));
+  row('Still in Treatment',  bool(lead.still_treating));
 
-  // ── Status ────────────────────────────────────────────────────────────────────
-  section('Lead Status');
-  row('Verified',  bool(lead.verified));
-  row('Delivered', bool(lead.delivered));
-  row('Disputed',  bool(lead.disputed));
-  row('Replaced',  bool(lead.replaced));
-  pdfDoc.moveDown(2);
+  // ── Financial Impact ──────────────────────────────────────────────────────
+  sectionHeader('Financial Impact');
+  row('Missed Work',          bool(lead.missed_work));
+  row('Lost Wages Estimate',  lead.lost_wages_estimate > 0 ? formatCurrency(lead.lost_wages_estimate) : 'Not reported');
+  row('Has Attorney',         bool(lead.has_attorney));
+  row('Insurance Contacted',  bool(lead.insurance_contacted));
 
-  // ── Disclaimer ────────────────────────────────────────────────────────────────
-  pdfDoc.fillColor('#6B7C74').fontSize(8).font('Helvetica').text(
-    'This report is confidential and for internal use only. Settlement estimates are based on general settlement data and are not legal advice. Results vary based on jurisdiction, facts, and applicable law.',
-    60, pdfDoc.page.height - 80,
-    { width: pdfDoc.page.width - 120, align: 'center' },
+  // ── Settlement Estimate ───────────────────────────────────────────────────
+  sectionHeader('Settlement Estimate');
+  row('Estimated Range',  `${formatCurrency(lead.estimate_low)} – ${formatCurrency(lead.estimate_high)}`);
+  row('Lead Score',       `${lead.score} / 150`);
+  row('Tier',             lead.tier);
+
+  // ── Lead Status ───────────────────────────────────────────────────────────
+  sectionHeader('Lead Status');
+  row('Delivered',  bool(lead.delivered));
+  row('Disputed',   bool(lead.disputed));
+  row('Replaced',   bool(lead.replaced));
+  if (lead.client_id) row('Assigned Client', String(lead.client_id));
+
+  // ── Contact Preference ────────────────────────────────────────────────────
+  sectionHeader('Contact Preference');
+  const cp = (lead as typeof lead & { contact_preference?: { urgency: string; preferred_hours: string[]; timezone: string } | null }).contact_preference;
+  if (cp) {
+    row('Best Time to Reach', urgencyLabel(cp.urgency));
+    row('Preferred Hours',    cp.preferred_hours.map(h => h.charAt(0).toUpperCase() + h.slice(1)).join(', '));
+    row('Timezone',           cp.timezone || 'Not provided');
+  } else {
+    row('Contact Preference', 'Not collected');
+  }
+
+  // ── Disclaimer ────────────────────────────────────────────────────────────
+  pdf.moveDown(2);
+  pdf.moveTo(LEFT, pdf.y).lineTo(LEFT + W, pdf.y).strokeColor('#CCCCCC').lineWidth(0.5).stroke();
+  pdf.moveDown(0.5);
+  pdf.font('Helvetica').fontSize(8).fillColor('#999999').text(
+    'This report is confidential and intended for internal use only. Settlement estimates are derived from general case data and do not constitute legal advice. Actual results vary based on jurisdiction, specific facts, and applicable law.',
+    LEFT, pdf.y, { width: W, align: 'center' },
   );
 
-  pdfDoc.end();
-  const pdfBuffer = await pdfComplete;
+  pdf.end();
+  const pdfBuffer = await done;
 
   return new NextResponse(new Uint8Array(pdfBuffer), {
     headers: {
       'Content-Type':        'application/pdf',
-      'Content-Disposition': `inline; filename="lead-${lead.id}-${lead.name.replace(/\s+/g, '-')}.pdf"`,
+      'Content-Disposition': `inline; filename="lead-${lead.id}.pdf"`,
       'Content-Length':      String(pdfBuffer.length),
     },
   });

@@ -31,6 +31,8 @@ import { INITIAL_ANSWERS } from '@/lib/quiz/types';
 import { formatCurrency, LOST_WAGES_MAX } from '@/lib/estimator/logic';
 import { validateEmailFormat } from '@/lib/validate-email';
 import SMSVerification from '@/components/SMSVerification';
+import ContactPreference from '@/components/ContactPreference';
+import type { ContactPrefs } from '@/components/ContactPreference';
 
 // ── Reducer ───────────────────────────────────────────────────────────────────
 
@@ -77,7 +79,7 @@ function AlertBox({ type, msg }: { type: 'warning' | 'tip' | 'success'; msg: str
 
 // ── Screen type ───────────────────────────────────────────────────────────────
 
-type Screen = 'quiz' | 'contact' | 'sms' | 'success' | 'attorney_exit' | 'disqualified';
+type Screen = 'quiz' | 'contact' | 'sms' | 'preference' | 'success' | 'attorney_exit' | 'disqualified';
 
 // ── Main component ────────────────────────────────────────────────────────────
 
@@ -97,6 +99,10 @@ export function QuizFlow() {
   const [email,      setEmail]     = useState('');
   const [emailError, setEmailError] = useState('');
   const [formError,  setFormError]  = useState('');
+
+  // Post-SMS state (stored while preference screen is shown)
+  const [pendingPhone,   setPendingPhone]   = useState('');
+  const [pendingIdToken, setPendingIdToken] = useState('');
 
   // Post-SMS API state
   const [loading,    setLoading]    = useState(false);
@@ -192,8 +198,18 @@ export function QuizFlow() {
   };
 
   // ── Called by SMSVerification after phone is verified ──────────────────────
+  // Store credentials and show the contact preference screen.
 
-  const handleSmsVerified = async (phoneNumber: string, phoneToken: string) => {
+  const handleSmsVerified = (phoneNumber: string, idToken: string) => {
+    setPendingPhone(phoneNumber);
+    setPendingIdToken(idToken);
+    setScreen('preference');
+  };
+
+  // ── Called after contact preference is selected ──────────────────────────
+  // Submits the lead to Firestore, saves preference, then redirects.
+
+  const handlePreferenceComplete = async (prefs: ContactPrefs) => {
     setLoading(true);
     setSmsError('');
 
@@ -208,17 +224,17 @@ export function QuizFlow() {
 
       const body: Record<string, unknown> = {
         ...answers,
-        phoneToken,
+        idToken:      pendingIdToken,
         name:         `${firstName.trim()} ${lastName.trim()}`,
         email:        email.trim(),
-        phone:        phoneNumber,
+        phone:        pendingPhone,
         injuryType,
         surgery:      answers.hasSurgery,
         estimateLow:  est.low,
         estimateHigh: est.high,
         score,
         tier,
-        source:       'quiz',
+        source: 'quiz',
       };
 
       const res  = await fetch('/api/verify-code', {
@@ -229,10 +245,26 @@ export function QuizFlow() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.message ?? 'Verification failed.');
 
+      const leadId = String(data.leadId ?? '');
+
+      // Save contact preference (fire-and-forget — don't block redirect on failure)
+      if (leadId) {
+        fetch('/api/leads/contact-preference', {
+          method:  'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({
+            leadId,
+            urgency:        prefs.urgency,
+            preferredHours: prefs.preferredHours,
+            timezone:       prefs.timezone,
+          }),
+        }).catch(() => {/* non-critical */});
+      }
+
       const params = new URLSearchParams({
         name:   firstName.trim(),
         state:  String(answers.state ?? ''),
-        leadId: String(data.leadId ?? ''),
+        leadId,
       });
       router.push(`/thank-you/lead?${params.toString()}`);
     } catch (err: unknown) {
@@ -565,6 +597,42 @@ export function QuizFlow() {
             <button className="sq-btn-back-plain" onClick={() => setScreen('contact')}>
               ← Back
             </button>
+          )}
+        </motion.div>
+      </div>
+    );
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // SCREEN: CONTACT PREFERENCE
+  // ══════════════════════════════════════════════════════════════════════════
+  if (screen === 'preference') {
+    return (
+      <div className="sq-page">
+        <div className="sq-header">
+          <img src="/images/sam-icons/sam-logo.png" className="sq-header-icon" alt="" aria-hidden="true" />
+          <div className="sq-progress-bar">
+            <div className="sq-progress-fill" style={{ width: '99%' }} />
+          </div>
+        </div>
+
+        <motion.div
+          className="sq-card"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3 }}
+        >
+          {loading ? (
+            <div style={{ textAlign: 'center', padding: '32px 0', color: 'var(--ss-muted)' }}>
+              Saving your results…
+            </div>
+          ) : smsError ? (
+            <div style={{ textAlign: 'center', padding: '16px 0' }}>
+              <p style={{ color: '#EF4444', marginBottom: 16 }}>{smsError}</p>
+              <button className="sq-btn-back-plain" onClick={() => setSmsError('')}>Try again</button>
+            </div>
+          ) : (
+            <ContactPreference leadName={firstName} onComplete={handlePreferenceComplete} />
           )}
         </motion.div>
       </div>
